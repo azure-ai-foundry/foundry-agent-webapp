@@ -12,8 +12,6 @@ public class AzureAIAgentService
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
     private readonly ILogger<AzureAIAgentService> _logger;
-    private readonly Dictionary<string, AgentThread> _threads = new();
-    private readonly Dictionary<string, string> _threadIdMapping = new(); // Maps our ID to persistent thread ID
     private AIAgent? _agent;
     private AgentMetadataResponse? _cachedMetadata; // Cache metadata to avoid repeated calls
     private readonly SemaphoreSlim _agentLock = new(1, 1);
@@ -192,6 +190,10 @@ public class AzureAIAgentService
         }
     }
 
+    /// <summary>
+    /// Streams agent response for a message on a thread with optional image attachments.
+    /// Returns chunks of text as they arrive, capturing usage metrics for the run.
+    /// </summary>
     public async IAsyncEnumerable<string> StreamMessageAsync(
         string threadId,
         string message,
@@ -203,97 +205,98 @@ public class AzureAIAgentService
         _logger.LogInformation("Streaming message to thread: {ThreadId}, ImageCount: {ImageCount}", 
             threadId, imageDataUris?.Count ?? 0);
         
-        // Validate input
         if (string.IsNullOrWhiteSpace(message))
         {
             _logger.LogWarning("Attempted to stream empty message to thread {ThreadId}", threadId);
             throw new ArgumentException("Message cannot be null or whitespace", nameof(message));
         }
 
-        // ALWAYS use persistent API to get real token usage
-        // The Agent Framework SDK doesn't provide usage info, so we need the persistent client
-        if (true) // Always use persistent API now
+        // The provided threadId is already a persistent thread identifier created by CreateThreadAsync
+        var messageContent = BuildMessageContent(message, imageDataUris);
+        
+        await _client.Messages.CreateMessageAsync(
+            threadId: threadId,
+            role: MessageRole.User,
+            contentBlocks: messageContent,
+            cancellationToken: cancellationToken);
+        
+        await foreach (var chunk in StreamAgentResponseAsync(threadId, _agentId, cancellationToken))
         {
-            string persistentThreadId;
-            
-            // Get or create persistent thread
-            if (!_threadIdMapping.TryGetValue(threadId, out persistentThreadId!))
-            {
-                _logger.LogInformation("Creating new persistent thread for file attachments");
-                var threadResponse = await _client.Threads.CreateThreadAsync(cancellationToken: cancellationToken);
-                persistentThreadId = threadResponse.Value.Id;
-                _threadIdMapping[threadId] = persistentThreadId;
-            }
-            
-            _logger.LogInformation("Creating message with {ImageCount} image(s) as inline content on thread {PersistentThreadId}", 
-                imageDataUris?.Count ?? 0, persistentThreadId);
-            
-            // Build message content array with text + images
-            // Images are sent as base64 data URIs (e.g., data:image/png;base64,iVBORw0KG...)
-            // This follows the Semantic Kernel pattern: ImageContent with DataUri property
-            var messageContent = new List<MessageInputContentBlock>
-            {
-                // Add the user's text message first
-                new MessageInputTextBlock(message)
-            };
-            
-            // Add each image as an inline data URI block (for vision/analysis)
-            // Azure AI Agents SDK accepts data URIs via MessageInputImageUriBlock
-            if (imageDataUris != null)
-            {
-                foreach (var dataUri in imageDataUris)
-                {
-                    var imageUriParam = new MessageImageUriParam(uri: dataUri);
-                    messageContent.Add(new MessageInputImageUriBlock(imageUriParam));
-                }
-            }
-
-            // Create the message with content blocks using the PersistentAgentsClient
-            await _client.Messages.CreateMessageAsync(
-                threadId: persistentThreadId,
-                role: MessageRole.User,
-                contentBlocks: messageContent,
-                cancellationToken: cancellationToken);
-            
-            // Create a streaming run using the persistent client
-            var streamingUpdates = _client.Runs.CreateRunStreamingAsync(
-                threadId: persistentThreadId,
-                agentId: _agentId,
-                cancellationToken: cancellationToken);
-            
-            // Reset usage info for this run
-            _lastRunUsage = null;
-            
-            // Stream the response
-            await foreach (var streamingUpdate in streamingUpdates)
-            {
-                // Handle message content updates
-                if (streamingUpdate is MessageContentUpdate contentUpdate)
-                {
-                    var text = contentUpdate.Text;
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        yield return text;
-                    }
-                }
-                // Capture usage information when run completes
-                else if (streamingUpdate is RunUpdate runUpdate 
-                    && runUpdate.UpdateKind == StreamingUpdateReason.RunCompleted
-                    && runUpdate.Value?.Usage != null)
-                {
-                    var usage = runUpdate.Value.Usage;
-                    _lastRunUsage = new UsageInfo
-                    {
-                        PromptTokens = (int)usage.PromptTokens,
-                        CompletionTokens = (int)usage.CompletionTokens,
-                        TotalTokens = (int)usage.TotalTokens
-                    };
-                }
-            }
-            
-            _logger.LogInformation("Completed streaming response for thread: {ThreadId}", threadId);
-            yield break;
+            yield return chunk;
         }
+        
+        _logger.LogInformation("Completed streaming response for thread: {ThreadId}", threadId);
+    }
+
+    /// <summary>
+    /// Builds message content blocks from text and optional image data URIs.
+    /// Images are encoded as base64 data URIs for inline vision analysis.
+    /// </summary>
+    private static List<MessageInputContentBlock> BuildMessageContent(string message, List<string>? imageDataUris)
+    {
+        var messageContent = new List<MessageInputContentBlock>
+        {
+            new MessageInputTextBlock(message)
+        };
+        
+        if (imageDataUris != null)
+        {
+            foreach (var dataUri in imageDataUris)
+            {
+                var imageUriParam = new MessageImageUriParam(uri: dataUri);
+                messageContent.Add(new MessageInputImageUriBlock(imageUriParam));
+            }
+        }
+        
+        return messageContent;
+    }
+
+    /// <summary>
+    /// Streams agent response chunks and captures usage metrics from the run.
+    /// Yields text content as it arrives and stores token usage when run completes.
+    /// </summary>
+    private async IAsyncEnumerable<string> StreamAgentResponseAsync(
+        string persistentThreadId,
+        string agentId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var streamingUpdates = _client.Runs.CreateRunStreamingAsync(
+            threadId: persistentThreadId,
+            agentId: agentId,
+            cancellationToken: cancellationToken);
+        
+        _lastRunUsage = null;
+        
+        await foreach (var streamingUpdate in streamingUpdates)
+        {
+            if (streamingUpdate is MessageContentUpdate contentUpdate)
+            {
+                var text = contentUpdate.Text;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    yield return text;
+                }
+            }
+            else if (streamingUpdate is RunUpdate runUpdate 
+                && runUpdate.UpdateKind == StreamingUpdateReason.RunCompleted
+                && runUpdate.Value?.Usage != null)
+            {
+                _lastRunUsage = ExtractUsageInfo(runUpdate.Value.Usage);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extracts token usage metrics from Azure AI Agents run usage data.
+    /// </summary>
+    private static UsageInfo ExtractUsageInfo(RunCompletionUsage usage)
+    {
+        return new UsageInfo
+        {
+            PromptTokens = (int)usage.PromptTokens,
+            CompletionTokens = (int)usage.CompletionTokens,
+            TotalTokens = (int)usage.TotalTokens
+        };
     }
 
     public Task<UsageInfo?> GetLastRunUsageAsync(CancellationToken cancellationToken = default)

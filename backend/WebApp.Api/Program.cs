@@ -170,7 +170,7 @@ app.MapGet("/api/health", (HttpContext context) =>
 .RequireAuthorization(ScopePolicyName)
 .WithName("GetHealth");
 
-// Streaming Chat endpoint: Send message and stream response using SSE
+// Streaming Chat endpoint: Streams agent response via SSE (threadId → chunks → usage → done)
 app.MapPost("/api/chat/stream", async (
     ChatRequest request,
     AzureAIAgentService agentService,
@@ -179,88 +179,91 @@ app.MapPost("/api/chat/stream", async (
 {
     try
     {
-        // Set headers for Server-Sent Events
         httpContext.Response.Headers.Append("Content-Type", "text/event-stream");
         httpContext.Response.Headers.Append("Cache-Control", "no-cache");
         httpContext.Response.Headers.Append("Connection", "keep-alive");
 
-        // Create new thread if not provided (with first message as title)
         var threadId = request.ThreadId
             ?? await agentService.CreateThreadAsync(request.Message, cancellationToken);
 
-        // Send thread ID first
-        await httpContext.Response.WriteAsync(
-            $"data: {{\"type\":\"threadId\",\"threadId\":\"{threadId}\"}}\n\n",
-            cancellationToken);
-        await httpContext.Response.Body.FlushAsync(cancellationToken);
+        await WriteThreadIdEvent(httpContext.Response, threadId, cancellationToken);
 
-        // Track start time for duration calculation
         var startTime = DateTime.UtcNow;
 
-        // Stream the response using Agent Framework SDK with optional image data URIs
         await foreach (var chunk in agentService.StreamMessageAsync(
             threadId,
             request.Message,
             request.ImageDataUris,
             cancellationToken))
         {
-            var json = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                type = "chunk",
-                content = chunk
-            });
-            
-            await httpContext.Response.WriteAsync(
-                $"data: {json}\n\n",
-                cancellationToken);
-            await httpContext.Response.Body.FlushAsync(cancellationToken);
+            await WriteChunkEvent(httpContext.Response, chunk, cancellationToken);
         }
 
-        // Calculate duration
-        var endTime = DateTime.UtcNow;
-        var duration = (endTime - startTime).TotalMilliseconds;
-
-        // Get usage info from agent service
+        var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
         var usage = await agentService.GetLastRunUsageAsync(cancellationToken);
 
-        // Send usage event if available
         if (usage != null)
         {
-            var usageJson = System.Text.Json.JsonSerializer.Serialize(new
+            await WriteUsageEvent(httpContext.Response, new
             {
-                type = "usage",
-                duration = duration,
+                duration,
                 promptTokens = usage.PromptTokens,
                 completionTokens = usage.CompletionTokens,
                 totalTokens = usage.TotalTokens
-            });
-            
-            await httpContext.Response.WriteAsync(
-                $"data: {usageJson}\n\n",
-                cancellationToken);
-            await httpContext.Response.Body.FlushAsync(cancellationToken);
+            }, cancellationToken);
         }
 
-        // Send completion event
-        await httpContext.Response.WriteAsync(
-            "data: {\"type\":\"done\"}\n\n",
-            cancellationToken);
-        await httpContext.Response.Body.FlushAsync(cancellationToken);
+        await WriteDoneEvent(httpContext.Response, cancellationToken);
     }
     catch (Exception ex)
     {
-        var errorJson = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            type = "error",
-            message = ex.Message
-        });
-        await httpContext.Response.WriteAsync(
-            $"data: {errorJson}\n\n",
-            cancellationToken);
+        await WriteErrorEvent(httpContext.Response, ex.Message, cancellationToken);
     }
 })
 .RequireAuthorization(ScopePolicyName)
 .WithName("StreamChatMessage");
+
+static async Task WriteThreadIdEvent(HttpResponse response, string threadId, CancellationToken ct)
+{
+    await response.WriteAsync(
+        $"data: {{\"type\":\"threadId\",\"threadId\":\"{threadId}\"}}\n\n",
+        ct);
+    await response.Body.FlushAsync(ct);
+}
+
+static async Task WriteChunkEvent(HttpResponse response, string content, CancellationToken ct)
+{
+    var json = System.Text.Json.JsonSerializer.Serialize(new { type = "chunk", content });
+    await response.WriteAsync($"data: {json}\n\n", ct);
+    await response.Body.FlushAsync(ct);
+}
+
+static async Task WriteUsageEvent(HttpResponse response, object usageData, CancellationToken ct)
+{
+    var json = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        type = "usage",
+        duration = ((dynamic)usageData).duration,
+        promptTokens = ((dynamic)usageData).promptTokens,
+        completionTokens = ((dynamic)usageData).completionTokens,
+        totalTokens = ((dynamic)usageData).totalTokens
+    });
+    await response.WriteAsync($"data: {json}\n\n", ct);
+    await response.Body.FlushAsync(ct);
+}
+
+static async Task WriteDoneEvent(HttpResponse response, CancellationToken ct)
+{
+    await response.WriteAsync("data: {\"type\":\"done\"}\n\n", ct);
+    await response.Body.FlushAsync(ct);
+}
+
+static async Task WriteErrorEvent(HttpResponse response, string message, CancellationToken ct)
+{
+    var json = System.Text.Json.JsonSerializer.Serialize(new { type = "error", message });
+    await response.WriteAsync($"data: {json}\n\n", ct);
+    await response.Body.FlushAsync(ct);
+}
 
 // Get agent metadata (name, description, model, metadata)
 // Used by frontend to display agent information in the UI

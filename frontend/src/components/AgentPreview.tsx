@@ -1,23 +1,20 @@
-import React, { useRef, useState, useMemo } from 'react';
-import { ChatInterface } from './ChatInterface.v2';
+import React, { useState, useMemo } from 'react';
+import { ChatInterface } from './ChatInterface';
 import { SettingsPanel } from './core/SettingsPanel';
 import { BuiltWithBadge } from './core/BuiltWithBadge';
 import { useAppState } from '../hooks/useAppState';
 import { useAuth } from '../hooks/useAuth';
 import { ChatService } from '../services/chatService';
 import { useAppContext } from '../contexts/AppContext';
-import type { ChatInterfaceRef } from '../App';
 import styles from './AgentPreview.module.css';
 
 interface AgentPreviewProps {
   agentId: string;
   agentName: string;
   agentDescription?: string;
-  agentLogo?: string;
 }
 
-export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDescription, agentLogo }) => {
-  const chatRef = useRef<ChatInterfaceRef>(null);
+export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDescription }) => {
   const { chat } = useAppState();
   const { dispatch } = useAppContext();
   const { getAccessToken } = useAuth();
@@ -50,7 +47,6 @@ export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDesc
     <div className={styles.content}>
       <div className={styles.mainContent}>
         <ChatInterface 
-          ref={chatRef}
           messages={chat.messages}
           status={chat.status}
           error={chat.error}
@@ -60,11 +56,9 @@ export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDesc
           onOpenSettings={() => setIsSettingsOpen(true)}
           onNewChat={handleNewChat}
           onCancelStream={handleCancelStream}
-          hasMessages={chat.messages.length > 0}
           disabled={false}
           agentName={agentName}
           agentDescription={agentDescription}
-          agentLogo={agentLogo}
         />
         
         <BuiltWithBadge className={styles.builtWithBadge} />
