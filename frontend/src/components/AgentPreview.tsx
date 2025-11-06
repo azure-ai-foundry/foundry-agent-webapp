@@ -1,0 +1,79 @@
+import React, { useRef, useState, useMemo } from 'react';
+import { ChatInterface } from './ChatInterface.v2';
+import { SettingsPanel } from './core/SettingsPanel';
+import { BuiltWithBadge } from './core/BuiltWithBadge';
+import { useAppState } from '../hooks/useAppState';
+import { useAuth } from '../hooks/useAuth';
+import { ChatService } from '../services/chatService';
+import { useAppContext } from '../contexts/AppContext';
+import type { ChatInterfaceRef } from '../App';
+import styles from './AgentPreview.module.css';
+
+interface AgentPreviewProps {
+  agentId: string;
+  agentName: string;
+  agentDescription?: string;
+  agentLogo?: string;
+}
+
+export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDescription, agentLogo }) => {
+  const chatRef = useRef<ChatInterfaceRef>(null);
+  const { chat } = useAppState();
+  const { dispatch } = useAppContext();
+  const { getAccessToken } = useAuth();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Create service instances
+  const apiUrl = import.meta.env.VITE_API_URL || '/api';
+  
+  const chatService = useMemo(() => {
+    return new ChatService(apiUrl, getAccessToken, dispatch);
+  }, [apiUrl, getAccessToken, dispatch]);
+
+  const handleSendMessage = async (text: string, files?: File[]) => {
+    await chatService.sendMessage(text, chat.currentThreadId, files);
+  };
+
+  const handleClearError = () => {
+    chatService.clearError();
+  };
+
+  const handleNewChat = () => {
+    chatService.clearChat();
+  };
+
+  const handleCancelStream = () => {
+    chatService.cancelStream();
+  };
+
+  return (
+    <div className={styles.content}>
+      <div className={styles.mainContent}>
+        <ChatInterface 
+          ref={chatRef}
+          messages={chat.messages}
+          status={chat.status}
+          error={chat.error}
+          streamingMessageId={chat.streamingMessageId}
+          onSendMessage={handleSendMessage}
+          onClearError={handleClearError}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onNewChat={handleNewChat}
+          onCancelStream={handleCancelStream}
+          hasMessages={chat.messages.length > 0}
+          disabled={false}
+          agentName={agentName}
+          agentDescription={agentDescription}
+          agentLogo={agentLogo}
+        />
+        
+        <BuiltWithBadge className={styles.builtWithBadge} />
+      </div>
+      
+      <SettingsPanel
+        isOpen={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+      />
+    </div>
+  );
+};

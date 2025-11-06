@@ -1,0 +1,29 @@
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  min-height: 300px;
+  background-color: var(--colorNeutralBackground2);
+  border-radius: 8px;
+  border: 1px solid var(--colorNeutralStroke2);
+}
+
+.errorIcon {
+  color: var(--colorPaletteRedForeground1);
+  width: 48px;
+  height: 48px;
+}
+
+.errorTitle {
+  color: var(--colorNeutralForeground1);
+  text-align: center;
+}
+
+.errorMessage {
+  color: var(--colorNeutralForeground2);
+  text-align: center;
+  max-width: 500px;
+}
