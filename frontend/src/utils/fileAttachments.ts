@@ -7,16 +7,56 @@ export interface FileConversionResult {
   sizeBytes: number;
 }
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+export interface FileValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_COUNT = 5;
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
 
 /**
  * Validate if a file is a supported image type and within size limits.
  * 
  * @param file - File to validate
- * @returns true if file is valid, false otherwise
+ * @returns Validation result with error message if invalid
  */
-export function validateImageFile(file: File): boolean {
-  return file.type.startsWith('image/') && file.size <= MAX_FILE_SIZE;
+export function validateImageFile(file: File): FileValidationResult {
+  if (!file.type.startsWith('image/')) {
+    return { valid: false, error: `"${file.name}" is not an image file` };
+  }
+
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type.toLowerCase())) {
+    return { valid: false, error: `"${file.name}" format not supported. Use PNG, JPEG, GIF, or WebP` };
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    return { valid: false, error: `"${file.name}" is ${sizeMB}MB. Maximum file size is 5MB` };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate multiple files for count and individual file requirements.
+ * 
+ * @param files - Files to validate
+ * @param currentFileCount - Number of files already attached
+ * @returns Validation result with error message if invalid
+ */
+export function validateFileCount(files: File[], currentFileCount: number = 0): FileValidationResult {
+  const totalCount = currentFileCount + files.length;
+  
+  if (totalCount > MAX_FILE_COUNT) {
+    return { 
+      valid: false, 
+      error: `Maximum ${MAX_FILE_COUNT} files allowed. You have ${currentFileCount} attached and are trying to add ${files.length} more` 
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -51,12 +91,10 @@ export async function convertFilesToDataUris(
   const results: FileConversionResult[] = [];
 
   for (const file of files) {
-    if (!file.type.startsWith('image/')) {
-      throw new Error(`File "${file.name}" is not an image`);
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`Image "${file.name}" exceeds 20MB limit`);
+    // Validate each file before conversion
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      throw new Error(validation.error);
     }
 
     const dataUri = await convertFileToDataUri(file);

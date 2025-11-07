@@ -1,4 +1,4 @@
-import { useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { AssistantMessage } from "./chat/AssistantMessage";
 import { UserMessage } from "./chat/UserMessage";
 import { StarterMessages } from "./chat/StarterMessages";
@@ -29,8 +29,9 @@ interface ChatInterfaceProps {
 }
 
 export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((props, ref) => {
-  const { messages, status, error, streamingMessageId, onSendMessage, onClearError, onOpenSettings, onNewChat, onCancelStream, hasMessages, disabled, agentName, agentDescription } = props;
+  const { messages, status, error, streamingMessageId, onSendMessage, onClearError, onOpenSettings, onNewChat, onCancelStream, hasMessages, disabled, agentName, agentDescription, agentLogo } = props;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [liveRegionMessage, setLiveRegionMessage] = useState<string>('');
   
   const isStreaming = status === 'streaming';
   const isBusy = disabled || ['sending', 'streaming'].includes(status);
@@ -43,6 +44,18 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
     // Scroll immediately on every message change for real-time streaming feel
     scrollToBottom();
   }, [messages]);
+
+  // Announce streaming status changes to screen readers
+  useEffect(() => {
+    if (isStreaming) {
+      setLiveRegionMessage('Assistant is responding');
+    } else if (status === 'idle' && messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+      setLiveRegionMessage('Response complete');
+      // Clear the message after announcement
+      const timer = setTimeout(() => setLiveRegionMessage(''), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, status, messages]);
 
   // Expose ref methods (no-op, controlled by parent now)
   useImperativeHandle(ref, () => ({
@@ -61,12 +74,29 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
 
   return (
     <div className={styles.chatContainer}>
-      <div className={styles.messagesContainer} role="log" aria-live="polite" aria-label="Chat messages">
+      {/* Live region for announcing streaming status to screen readers */}
+      <div 
+        role="status" 
+        aria-live="polite" 
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {liveRegionMessage}
+      </div>
+
+      <div 
+        className={styles.messagesContainer} 
+        role="log" 
+        aria-live="polite" 
+        aria-label="Chat messages"
+        aria-busy={isStreaming}
+      >
         <div className={styles.messagesWrapper}>
           {messages.length === 0 ? (
             <StarterMessages 
               agentName={agentName}
               agentDescription={agentDescription}
+              agentLogo={agentLogo}
               onPromptClick={handleStarterPromptClick}
             />
           ) : (
@@ -85,6 +115,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
                     message={message} 
                     isStreaming={isStreaming && message.id === streamingMessageId}
                     agentName={agentName}
+                    agentLogo={agentLogo}
                   />
                 )
               )}

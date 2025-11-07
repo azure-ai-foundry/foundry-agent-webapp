@@ -6,6 +6,7 @@ import styles from './StarterMessages.module.css';
 interface IStarterMessageProps {
   agentName?: string;
   agentDescription?: string;
+  agentLogo?: string;
   onPromptClick?: (prompt: string) => void;
 }
 
@@ -21,6 +22,7 @@ const defaultStarterPrompts = [
 export const StarterMessages = ({
   agentName,
   agentDescription,
+  agentLogo,
   onPromptClick,
 }: IStarterMessageProps): ReactNode => {
   return (
@@ -29,6 +31,7 @@ export const StarterMessages = ({
         <AgentIcon
           alt={agentName ?? "Agent"}
           size="large"
+          logoUrl={agentLogo}
         />
         <Subtitle1 className={styles.welcome}>
           {agentName ? `Hello! I'm ${agentName}` : "Hello! How can I help you today?"}

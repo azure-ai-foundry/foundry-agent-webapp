@@ -71,35 +71,25 @@ Dockerfile copies `.npmrc` if present. Don't commit tokens.
 ### Middleware Order (NEVER reorder)
 **Goal**: Serve static files, validate auth, route APIs, fallback to SPA
 
-```csharp
-app.UseDefaultFiles();     // index.html for /
-app.UseStaticFiles();      // wwwroot/* assets
-app.UseAuthentication();   // JWT validation
-app.UseAuthorization();    // Scope enforcement
-// Map API endpoints here
-app.MapFallbackToFile("index.html");  // SPA fallback (LAST)
-```
+**See**: `backend/WebApp.Api/Program.cs` for correct ordering:
+1. `UseDefaultFiles()` / `UseStaticFiles()` - Serve SPA assets
+2. `UseAuthentication()` / `UseAuthorization()` - Validate JWT
+3. Map API endpoints
+4. `MapFallbackToFile("index.html")` - MUST BE LAST
 
 ### API Endpoint Pattern
-**Always use**: `.RequireAuthorization("RequireChatScope")` + `CancellationToken`
+**Always use**: `.RequireAuthorization("RequireChatScope")` + `CancellationToken` + `IHostEnvironment` (for error handling)
 
-```csharp
-app.MapPost("/api/endpoint", async (
-    Request request,
-    Service service,
-    CancellationToken ct) => await service.DoWorkAsync(request, ct))
-.RequireAuthorization("RequireChatScope");
-```
+**See**: `backend/WebApp.Api/Program.cs` for endpoint patterns with:
+- `ErrorResponseFactory.CreateFromException()` for RFC 7807-compliant errors
+- Development vs production error detail sanitization
+- Proper exception handling in streaming and non-streaming endpoints
 
 ### Credential Strategy
 **Local**: `ChainedTokenCredential` (uses `az login`)  
 **Production**: `ManagedIdentityCredential` (system-assigned)
 
-```csharp
-var credential = env == "Development" 
-    ? new ChainedTokenCredential(new AzureCliCredential(), new AzureDeveloperCliCredential())
-    : new ManagedIdentityCredential();
-```
+**See**: `backend/WebApp.Api/Services/AzureAIAgentService.cs` constructor for environment-aware credential selection
 
 ## Deployment Phases
 
@@ -135,6 +125,9 @@ See `AGENTS.md` files for implementation details:
 ### ✅ Always Do
 - Use `.RequireAuthorization("RequireChatScope")` on all API endpoints
 - Accept and propagate `CancellationToken` in async methods
+- Use `ErrorResponseFactory.CreateFromException()` for consistent error responses
+- Implement `IDisposable` for services with disposable resources (e.g., `SemaphoreSlim`)
+- Validate file uploads before processing (size, count, type)
 - Use explicit credentials: `ChainedTokenCredential` (local) or `ManagedIdentityCredential` (cloud)
 - Try `acquireTokenSilent()` first, fallback to `acquireTokenPopup()`
 - Access `import.meta.env.*` at module level only
@@ -142,5 +135,7 @@ See `AGENTS.md` files for implementation details:
 ### ❌ Never Do
 - Commit `.env*` files
 - Use `.Result` or `.Wait()` on async methods
+- Expose internal error details in production (use `IHostEnvironment.IsDevelopment()`)
+- Forget disposal guards in `IDisposable` methods
 - Reorder middleware pipeline
 - Access `import.meta.env.*` inside functions

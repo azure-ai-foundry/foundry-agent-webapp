@@ -1,5 +1,23 @@
 import type { AppError, ErrorCode } from '../types/errors';
-import { ERROR_MESSAGES, isRecoverableError } from '../types/errors';
+import { DETAILED_ERROR_MESSAGES, isRecoverableError } from '../types/errors';
+
+/**
+ * Get user-friendly error message with recovery hints.
+ * Provides more detailed, actionable guidance than basic error messages.
+ * 
+ * @param code - Error code
+ * @param includeHint - Whether to include recovery hint
+ * @returns User-friendly error message
+ */
+export function getUserFriendlyMessage(code: ErrorCode, includeHint: boolean = true): string {
+  const detailed = DETAILED_ERROR_MESSAGES[code];
+  
+  if (includeHint) {
+    return `${detailed.description} ${detailed.hint}`;
+  }
+  
+  return detailed.description;
+}
 
 /**
  * Convert various error types to structured AppError
@@ -9,11 +27,12 @@ export function createAppError(
   code: ErrorCode = 'UNKNOWN',
   retryHandler?: () => void
 ): AppError {
-  const errorMessage = error instanceof Error ? error.message : String(error);
+  // Use user-friendly message instead of raw error message
+  const friendlyMessage = getUserFriendlyMessage(code);
   
   const appError: AppError = {
     code,
-    message: errorMessage || ERROR_MESSAGES[code],
+    message: friendlyMessage,
     recoverable: isRecoverableError(code),
     originalError: error instanceof Error ? error : undefined,
   };
@@ -56,8 +75,14 @@ export async function parseErrorFromResponse(response: Response): Promise<string
   try {
     const data = await response.json();
     
+    // Check for RFC 7807 Problem Details format (title/detail)
+    if (data.title || data.detail) {
+      // Prefer detail over title for more specific information
+      return data.detail || data.title;
+    }
+    
     // Extract error message, handling both string and object formats
-    const errorData = data.error || data.detail || data.message;
+    const errorData = data.error || data.message;
     
     // If errorData is an object with a message property, extract it
     if (errorData && typeof errorData === 'object' && 'message' in errorData) {
@@ -69,10 +94,13 @@ export async function parseErrorFromResponse(response: Response): Promise<string
       return errorData;
     }
     
-    // Fallback to status message
-    return `Request failed with status ${response.status}`;
+    // Fallback to user-friendly message based on status code
+    const errorCode = getErrorCodeFromResponse(response);
+    return getUserFriendlyMessage(errorCode);
   } catch {
-    return `Request failed with status ${response.status}`;
+    // If JSON parsing fails, use user-friendly message
+    const errorCode = getErrorCodeFromResponse(response);
+    return getUserFriendlyMessage(errorCode);
   }
 }
 

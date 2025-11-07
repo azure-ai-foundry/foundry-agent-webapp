@@ -4,11 +4,13 @@ import { Bot24Regular } from '@fluentui/react-icons';
 interface AgentIconProps {
   alt?: string;
   size?: 'small' | 'medium' | 'large';
+  logoUrl?: string;
 }
 
 export function AgentIcon({ 
   alt = "AI Assistant", 
-  size = 'medium' 
+  size = 'medium',
+  logoUrl
 }: AgentIconProps) {
   const sizeMap: Record<string, number> = {
     small: 32,
@@ -19,7 +21,8 @@ export function AgentIcon({
   return (
     <Avatar
       aria-label={alt}
-      icon={<Bot24Regular />}
+      image={logoUrl ? { src: logoUrl } : undefined}
+      icon={!logoUrl ? <Bot24Regular /> : undefined}
       size={sizeMap[size] as any}
       color="brand"
     />

@@ -36,26 +36,63 @@ VITE_API_URL=/api
 ## Key Components
 
 | Component | Purpose |
-|-----------|---------|
+|-----------|---------||
 | `AgentPreview.tsx` | Container wiring chat state to controlled `ChatInterface` |
 | `ChatInterface.v2.tsx` | Stateless controlled UI; renders messages, input, errors |
 | `chat/AssistantMessage.tsx` | Memoized assistant message with streaming support |
-| `chat/UserMessage.tsx` | Memoized user message display |
-| `chat/ChatInput.tsx` | File uploads (select + paste), cancel streaming button, focus management |
+| `chat/UserMessage.tsx` | Memoized user message with image thumbnail previews |
+| `chat/ChatInput.tsx` | File uploads (select + paste + drag), character counter, cancel streaming button, focus management |
+| `chat/FilePreview.tsx` | Thumbnail preview grid for attached files before sending |
 | `core/ErrorBoundary.tsx` | Catches runtime errors and displays fallback UI |
 | `core/Markdown.tsx` | Sanitized markdown rendering with syntax highlighting |
+| `core/AgentIcon.tsx` | Agent avatar with optional custom logo URL support |
+
+## File Upload Validation
+
+**Limits**: 5MB per file, max 5 files total
+
+**Supported formats**: PNG, JPEG, GIF, WebP
+
+**See**:
+- `frontend/src/utils/fileAttachments.ts` for `validateImageFile()` and `validateFileCount()` functions
+- `frontend/src/components/chat/ChatInput.tsx` for usage in file select, paste, and drag handlers
+
+**Key points**:
+- User-friendly error messages (e.g., "file.jpg is 8.5MB. Maximum file size is 5MB")
+- Toast notifications for validation feedback
+- Separate validation functions for count and individual files
+
+## Character Counter
+
+**See**: `frontend/src/components/chat/ChatInput.tsx`
+
+**Thresholds**: 3000 (warning), 3500 (danger), 4000 (recommended max)
+
+**Behavior**: 
+- Counter appears at 3000+ characters
+- Color changes from yellow to orange as limit approaches
+- Informational only - doesn't block submission
+- Linked to input via `aria-describedby` for accessibility
+
+## Agent Logo Support
+
+**See**: 
+- `frontend/src/components/core/AgentIcon.tsx` for logo rendering logic
+- `frontend/src/components/AgentPreview.tsx`, `ChatInterface.tsx`, `StarterMessages.tsx`, `AssistantMessage.tsx` for prop threading
+
+**Pattern**: Optional `agentLogo` URL passed through component tree, falls back to default bot icon if not provided.
 
 ## MSAL Configuration
 
-**Complete patterns**: See `.github/instructions/typescript.instructions.md`
+**See**: 
+- `frontend/src/config/authConfig.ts` for MSAL configuration
+- `frontend/src/hooks/useAuth.ts` for token acquisition pattern
+- `.github/instructions/typescript.instructions.md` for detailed patterns
 
 **Key points**:
 - Environment variables accessed at module level only
-- MSAL initialization with event callback for login success
 - Token acquisition: silent first, fallback to popup
 - Authorization header format: `Bearer ${token}`
-
-Refer to the instructions file for complete code examples.
 
 ## Action Flow (Send Message)
 
@@ -100,10 +137,14 @@ Changes: { field: before → after }
 ## Accessibility Checklist
 
 - ✅ Live region announces latest assistant message
+- ✅ Live region announces streaming status changes ("Assistant is responding")
+- ✅ `aria-busy` attribute on messages container during streaming
 - ✅ Buttons have `aria-label` when icon-only
 - ✅ Focus returns to input after sending
 - ✅ File removal buttons announce target file name
 - ✅ Loading states announced to screen readers
+- ✅ Character counter linked via `aria-describedby`
+- ✅ File preview list has `role="list"` and `aria-label`
 
 ## Local Development
 

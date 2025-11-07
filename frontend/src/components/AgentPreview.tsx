@@ -12,9 +12,10 @@ interface AgentPreviewProps {
   agentId: string;
   agentName: string;
   agentDescription?: string;
+  agentLogo?: string;
 }
 
-export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDescription }) => {
+export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDescription, agentLogo }) => {
   const { chat } = useAppState();
   const { dispatch } = useAppContext();
   const { getAccessToken } = useAuth();
@@ -59,6 +60,7 @@ export const AgentPreview: React.FC<AgentPreviewProps> = ({ agentName, agentDesc
           disabled={false}
           agentName={agentName}
           agentDescription={agentDescription}
+          agentLogo={agentLogo}
         />
         
         <BuiltWithBadge className={styles.builtWithBadge} />

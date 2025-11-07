@@ -1,6 +1,6 @@
 import { Suspense, memo } from 'react';
-import { Spinner } from '@fluentui/react-components';
-import { Attach24Regular } from '@fluentui/react-icons';
+import { Spinner, Badge } from '@fluentui/react-components';
+import { Attach24Regular, ImageRegular } from '@fluentui/react-icons';
 import { UserMessage as CopilotUserMessage } from '@fluentui-copilot/react-copilot-chat';
 import { Markdown } from '../core/Markdown';
 import { useFormatTimestamp } from '../../hooks/useFormatTimestamp';
@@ -32,17 +32,46 @@ function UserMessageComponent({ message }: UserMessageProps) {
         <Markdown content={message.content} />
         {message.attachments && message.attachments.length > 0 && (
           <div className={styles.attachments}>
-            {message.attachments.map((attachment, index) => (
-              <div key={index} className={styles.attachmentItem}>
-                <Attach24Regular className={styles.attachmentIcon} />
-                <div className={styles.attachmentInfo}>
-                  <span className={styles.attachmentName}>{attachment.fileName}</span>
-                  <span className={styles.attachmentSize}>
-                    {formatFileSize(attachment.fileSizeBytes)}
-                  </span>
+            {message.attachments.map((attachment, index) => {
+              // Show thumbnail preview for images with dataUri
+              if (attachment.dataUri && attachment.fileName.match(/\.(png|jpe?g|gif|webp)$/i)) {
+                return (
+                  <div key={index} className={styles.thumbnailItem}>
+                    {attachment.dataUri ? (
+                      <img 
+                        src={attachment.dataUri} 
+                        alt={attachment.fileName}
+                        className={styles.thumbnail}
+                      />
+                    ) : (
+                      <div className={styles.placeholderIcon}>
+                        <ImageRegular fontSize={32} />
+                      </div>
+                    )}
+                    <Badge 
+                      appearance="filled" 
+                      size="small"
+                      className={styles.sizeBadge}
+                    >
+                      {formatFileSize(attachment.fileSizeBytes)}
+                    </Badge>
+                  </div>
+                );
+              }
+              
+              // Fall back to list view for non-images or attachments without dataUri
+              return (
+                <div key={index} className={styles.attachmentItem}>
+                  <Attach24Regular className={styles.attachmentIcon} />
+                  <div className={styles.attachmentInfo}>
+                    <span className={styles.attachmentName}>{attachment.fileName}</span>
+                    <span className={styles.attachmentSize}>
+                      {formatFileSize(attachment.fileSizeBytes)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Suspense>

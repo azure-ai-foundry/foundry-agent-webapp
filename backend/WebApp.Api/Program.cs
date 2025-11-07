@@ -175,6 +175,7 @@ app.MapPost("/api/chat/stream", async (
     ChatRequest request,
     AzureAIAgentService agentService,
     HttpContext httpContext,
+    IHostEnvironment environment,
     CancellationToken cancellationToken) =>
 {
     try
@@ -217,7 +218,15 @@ app.MapPost("/api/chat/stream", async (
     }
     catch (Exception ex)
     {
-        await WriteErrorEvent(httpContext.Response, ex.Message, cancellationToken);
+        var errorResponse = ErrorResponseFactory.CreateFromException(
+            ex, 
+            500, 
+            environment.IsDevelopment());
+        
+        await WriteErrorEvent(
+            httpContext.Response, 
+            errorResponse.Detail ?? errorResponse.Title, 
+            cancellationToken);
     }
 })
 .RequireAuthorization(ScopePolicyName)
@@ -269,6 +278,7 @@ static async Task WriteErrorEvent(HttpResponse response, string message, Cancell
 // Used by frontend to display agent information in the UI
 app.MapGet("/api/agent", async (
     AzureAIAgentService agentService,
+    IHostEnvironment environment,
     CancellationToken cancellationToken) =>
 {
     try
@@ -278,10 +288,16 @@ app.MapGet("/api/agent", async (
     }
     catch (Exception ex)
     {
+        var errorResponse = ErrorResponseFactory.CreateFromException(
+            ex, 
+            500, 
+            environment.IsDevelopment());
+        
         return Results.Problem(
-            title: "Failed to retrieve agent metadata",
-            detail: ex.Message,
-            statusCode: 500
+            title: errorResponse.Title,
+            detail: errorResponse.Detail,
+            statusCode: errorResponse.Status,
+            extensions: errorResponse.Extensions
         );
     }
 })
@@ -291,6 +307,7 @@ app.MapGet("/api/agent", async (
 // Get agent info (for debugging)
 app.MapGet("/api/agent/info", async (
     AzureAIAgentService agentService,
+    IHostEnvironment environment,
     CancellationToken cancellationToken) =>
 {
     try
@@ -304,10 +321,17 @@ app.MapGet("/api/agent/info", async (
     }
     catch (Exception ex)
     {
+        var errorResponse = ErrorResponseFactory.CreateFromException(
+            ex, 
+            500, 
+            environment.IsDevelopment());
+        
         return Results.Problem(
-            detail: ex.Message,
-            statusCode: 500,
-            title: "AI Agent Error");
+            title: errorResponse.Title,
+            detail: errorResponse.Detail,
+            statusCode: errorResponse.Status,
+            extensions: errorResponse.Extensions
+        );
     }
 })
 .RequireAuthorization(ScopePolicyName)

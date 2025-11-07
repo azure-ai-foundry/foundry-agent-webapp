@@ -11,12 +11,14 @@ import styles from './AssistantMessage.module.css';
 interface AssistantMessageProps {
   message: IChatItem;
   agentName?: string;
+  agentLogo?: string;
   isStreaming?: boolean;
 }
 
 function AssistantMessageComponent({ 
   message, 
   agentName = 'AI Assistant',
+  agentLogo,
   isStreaming = false,
 }: AssistantMessageProps) {
   const formatTimestamp = useFormatTimestamp();
@@ -28,7 +30,7 @@ function AssistantMessageComponent({
   return (
     <CopilotMessage
       id={`msg-${message.id}`}
-      avatar={<AgentIcon />}
+      avatar={<AgentIcon logoUrl={agentLogo} />}
       name={agentName}
       loadingState="none"
       className={styles.copilotMessage}
@@ -66,6 +68,7 @@ export const AssistantMessage = memo(AssistantMessageComponent, (prev, next) => 
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
     prev.isStreaming === next.isStreaming &&
+    prev.agentLogo === next.agentLogo &&
     prev.message.more?.usage === next.message.more?.usage
   );
 });

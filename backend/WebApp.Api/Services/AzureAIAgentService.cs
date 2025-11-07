@@ -7,7 +7,7 @@ using WebApp.Api.Models;
 
 namespace WebApp.Api.Services;
 
-public class AzureAIAgentService
+public class AzureAIAgentService : IDisposable
 {
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
@@ -16,6 +16,7 @@ public class AzureAIAgentService
     private AgentMetadataResponse? _cachedMetadata; // Cache metadata to avoid repeated calls
     private readonly SemaphoreSlim _agentLock = new(1, 1);
     private UsageInfo? _lastRunUsage;
+    private bool _disposed = false;
 
     public AzureAIAgentService(
         IConfiguration configuration,
@@ -81,6 +82,8 @@ public class AzureAIAgentService
 
     private async Task<AIAgent> GetAgentAsync(CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         if (_agent != null)
             return _agent;
 
@@ -111,6 +114,8 @@ public class AzureAIAgentService
 
     public async Task<string> GetAgentInfoAsync(CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         var agent = await GetAgentAsync(cancellationToken);
         return agent?.ToString() ?? "AI Assistant";
     }
@@ -121,6 +126,8 @@ public class AzureAIAgentService
     /// </summary>
     public async Task<AgentMetadataResponse> GetAgentMetadataAsync(CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         // Return cached metadata if available (matches Azure sample pattern)
         if (_cachedMetadata != null)
         {
@@ -152,6 +159,8 @@ public class AzureAIAgentService
 
     public async Task<string> CreateThreadAsync(string? firstMessage = null, CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         try
         {
             _logger.LogInformation("Creating new conversation thread");
@@ -200,6 +209,8 @@ public class AzureAIAgentService
         List<string>? imageDataUris = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         var agent = await GetAgentAsync(cancellationToken);
         
         _logger.LogInformation("Streaming message to thread: {ThreadId}, ImageCount: {ImageCount}", 
@@ -301,7 +312,22 @@ public class AzureAIAgentService
 
     public Task<UsageInfo?> GetLastRunUsageAsync(CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        
         return Task.FromResult(_lastRunUsage);
+    }
+
+    /// <summary>
+    /// Dispose of managed resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _agentLock.Dispose();
+            _disposed = true;
+            _logger.LogDebug("AzureAIAgentService disposed");
+        }
     }
 }
 

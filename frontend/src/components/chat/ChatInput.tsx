@@ -4,9 +4,36 @@ import {
   ImperativeControlPlugin,
   type ImperativeControlPluginRef,
 } from '@fluentui-copilot/react-copilot';
-import { Button } from '@fluentui/react-components';
-import { Attach24Regular, Dismiss24Regular, Settings24Regular, ChatAdd24Regular, Stop24Regular } from '@fluentui/react-icons';
+import { Button, Toast, ToastTitle, Toaster, useId, useToastController, Text, makeStyles, tokens } from '@fluentui/react-components';
+import { Attach24Regular, Settings24Regular, ChatAdd24Regular, Stop24Regular } from '@fluentui/react-icons';
+import { FilePreview } from './FilePreview';
+import { validateImageFile, validateFileCount } from '../../utils/fileAttachments';
 import styles from './ChatInput.module.css';
+
+const CHAR_WARNING_THRESHOLD = 3000;
+const CHAR_DANGER_THRESHOLD = 3500;
+const CHAR_MAX_RECOMMENDED = 4000;
+
+const useCharCounterStyles = makeStyles({
+  container: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    paddingRight: tokens.spacingHorizontalM,
+    paddingBottom: tokens.spacingVerticalXS,
+  },
+  text: {
+    fontSize: tokens.fontSizeBase200,
+  },
+  normal: {
+    color: tokens.colorNeutralForeground3,
+  },
+  warning: {
+    color: tokens.colorPaletteYellowForeground1,
+  },
+  danger: {
+    color: tokens.colorPaletteDarkOrangeForeground1,
+  },
+});
 
 interface ChatInputProps {
   onSubmit: (value: string, files?: File[]) => void;
@@ -34,6 +61,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const controlRef = useRef<ImperativeControlPluginRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  
+  const toasterId = useId("toaster");
+  const { dispatchToast } = useToastController(toasterId);
+  const charCounterId = useId("char-counter");
+  const counterStyles = useCharCounterStyles();
+
+  const charCount = inputText.length;
+  const showCounter = charCount >= CHAR_WARNING_THRESHOLD;
+  
+  const getCounterStyle = () => {
+    if (charCount >= CHAR_DANGER_THRESHOLD) return counterStyles.danger;
+    if (charCount >= CHAR_WARNING_THRESHOLD) return counterStyles.warning;
+    return counterStyles.normal;
+  };
 
   // Auto-focus on mount for immediate typing
   useEffect(() => {
@@ -81,14 +122,42 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    // Validate that all files are images
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-    if (imageFiles.length !== files.length) {
-      console.warn('Only image files are allowed');
+    
+    // Validate file count first
+    const countValidation = validateFileCount(files, selectedFiles.length);
+    if (!countValidation.valid) {
+      dispatchToast(
+        <Toast>
+          <ToastTitle>{countValidation.error}</ToastTitle>
+        </Toast>,
+        { intent: 'warning' }
+      );
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
     }
-    if (imageFiles.length > 0) {
-      setSelectedFiles(prev => [...prev, ...imageFiles]);
+
+    // Validate each file
+    const validFiles: File[] = [];
+    for (const file of files) {
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        dispatchToast(
+          <Toast>
+            <ToastTitle>{validation.error}</ToastTitle>
+          </Toast>,
+          { intent: 'error' }
+        );
+      } else {
+        validFiles.push(file);
+      }
     }
+
+    if (validFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...validFiles]);
+    }
+    
     // Reset input value so same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -112,16 +181,46 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const item = items[i];
       if (item.kind === 'file') {
         const file = item.getAsFile();
-        // Only accept image files
-        if (file && file.type.startsWith('image/')) {
+        if (file) {
           files.push(file);
         }
       }
     }
 
-    if (files.length > 0) {
+    if (files.length === 0) return;
+
+    // Validate file count
+    const countValidation = validateFileCount(files, selectedFiles.length);
+    if (!countValidation.valid) {
       event.preventDefault();
-      setSelectedFiles(prev => [...prev, ...files]);
+      dispatchToast(
+        <Toast>
+          <ToastTitle>{countValidation.error}</ToastTitle>
+        </Toast>,
+        { intent: 'warning' }
+      );
+      return;
+    }
+
+    // Validate each file
+    const validFiles: File[] = [];
+    for (const file of files) {
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        dispatchToast(
+          <Toast>
+            <ToastTitle>{validation.error}</ToastTitle>
+          </Toast>,
+          { intent: 'error' }
+        );
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    if (validFiles.length > 0) {
+      event.preventDefault();
+      setSelectedFiles(prev => [...prev, ...validFiles]);
     }
   };
 
@@ -133,37 +232,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
   return (
-    <div className={styles.chatInputContainer} onPaste={handlePaste} onKeyDown={handleKeyDown} ref={inputContainerRef}>
-      {selectedFiles.length > 0 && (
-        <div className={styles.attachmentsPreview}>
-          {selectedFiles.map((file, index) => (
-            <div key={index} className={styles.attachmentItem}>
-              <span className={styles.attachmentName}>{file.name}</span>
-              <span className={styles.attachmentSize}>({formatFileSize(file.size)})</span>
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<Dismiss24Regular />}
-                onClick={() => handleRemoveFile(index)}
-                disabled={disabled}
-                aria-label={`Remove ${file.name}`}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-      <div className={styles.inputWrapper}>
+    <>
+      <Toaster toasterId={toasterId} position="top-end" />
+      <div className={styles.chatInputContainer} onPaste={handlePaste} onKeyDown={handleKeyDown} ref={inputContainerRef}>
+        <FilePreview 
+          files={selectedFiles}
+          onRemove={handleRemoveFile}
+          disabled={disabled}
+        />
+        <div className={styles.inputWrapper}>
         <ChatInputFluent
           aria-label="Chat Input"
+          aria-describedby={showCounter ? charCounterId : undefined}
           charactersRemainingMessage={() => ``}
           disabled={disabled || isStreaming}
           history={true}
@@ -173,6 +254,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         >
           <ImperativeControlPlugin ref={controlRef} />
         </ChatInputFluent>
+        {showCounter && (
+          <div className={counterStyles.container} id={charCounterId}>
+            <Text className={`${counterStyles.text} ${getCounterStyle()}`}>
+              {charCount} / {CHAR_MAX_RECOMMENDED} characters (recommended limit)
+            </Text>
+          </div>
+        )}
         <div className={styles.buttonRow}>
           <div className={styles.actionButtons}>
             {onOpenSettings && (
@@ -220,5 +308,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         accept="image/*"
       />
     </div>
+    </>
   );
 };

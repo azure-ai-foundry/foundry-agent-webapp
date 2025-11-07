@@ -46,64 +46,35 @@ app.MapPost("/api/chat/stream", async (
 .WithName("StreamChatMessage");
 ```
 
+## Error Handling
+
+**Pattern**: Use `ErrorResponseFactory` for consistent error responses following RFC 7807 Problem Details.
+
+**See**: 
+- `backend/WebApp.Api/Models/ErrorResponse.cs` for `ErrorResponseFactory` implementation
+- `backend/WebApp.Api/Program.cs` endpoints (`/api/chat/stream`, `/api/agent`, `/api/agent/info`) for usage patterns
+
+**Key points**:
+- Development: Returns full exception details + stack trace in extensions
+- Production: Returns user-friendly messages, hides internal details
+- Maps status codes to actionable error messages
+
 ## AzureAIAgentService Implementation
 
-From `Services/AzureAIAgentService.cs`:
+**See**: `backend/WebApp.Api/Services/AzureAIAgentService.cs`
 
-```csharp
-public class AzureAIAgentService
-{
-    private readonly PersistentAgentsClient _client;
-    private readonly string _agentId;
-
-    public AzureAIAgentService(IConfiguration configuration, ILogger<AzureAIAgentService> logger)
-    {
-        var endpoint = configuration["AI_FOUNDRY_AGENT_ENDPOINT"] 
-            ?? throw new InvalidOperationException("AI_FOUNDRY_AGENT_ENDPOINT not configured");
-        
-        _agentId = configuration["AI_FOUNDRY_AGENT_ID"]
-            ?? throw new InvalidOperationException("AI_FOUNDRY_AGENT_ID not configured");
-        
-        // Environment-aware credential selection (see .github/instructions/csharp.instructions.md)
-        var environment = configuration["ASPNETCORE_ENVIRONMENT"] ?? "Production";
-        
-        TokenCredential credential = environment == "Development"
-            ? new ChainedTokenCredential(new AzureCliCredential(), new AzureDeveloperCliCredential())
-            : new ManagedIdentityCredential();  // Production: system-assigned managed identity
-        
-        _client = new PersistentAgentsClient(endpoint, credential);
-    }
+**Key patterns**:
+- `IDisposable` implementation with `_agentLock.Dispose()`
+- Disposal guards (`ObjectDisposedException.ThrowIf`) in all public methods
+- Environment-aware credential selection (dev: `ChainedTokenCredential`, prod: `ManagedIdentityCredential`)
+- Cached agent instance with `SemaphoreSlim` for thread safety
+- Configuration validation (`AI_FOUNDRY_AGENT_ENDPOINT`, `AI_FOUNDRY_AGENT_ID`)
     
-    public async IAsyncEnumerable<string> StreamMessageAsync(
-        string threadId,
-        string message,
-        List<string>? imageDataUris = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        // Build message content with text + images
-        var messageContent = new List<MessageInputContentBlock> { new MessageInputTextBlock(message) };
-        
-        if (imageDataUris != null)
-        {
-            foreach (var dataUri in imageDataUris)
-            {
-                messageContent.Add(new MessageInputImageUriBlock(new MessageImageUriParam(uri: dataUri)));
-            }
-        }
-        
-        await _client.Messages.CreateMessageAsync(threadId, MessageRole.User, messageContent, cancellationToken);
-        
-        var streamingUpdates = _client.Runs.CreateRunStreamingAsync(threadId, _agentId, cancellationToken);
-        
-        await foreach (var update in streamingUpdates)
-        {
-            if (update is MessageContentUpdate contentUpdate && !string.IsNullOrEmpty(contentUpdate.Text))
-            {
-                yield return contentUpdate.Text;
-            }
-        }
-    }
-}
+**Streaming pattern**: See `StreamMessageAsync` method for:
+- Disposal guard before processing
+- Multi-modal message support (text + image data URIs)
+- `IAsyncEnumerable<string>` with `[EnumeratorCancellation]`
+- `MessageContentUpdate` filtering for text content
 ```
 
 ## JWT Validation
@@ -132,7 +103,10 @@ if (File.Exists(envFile))
 
 ## Models
 
-```csharp
-public record ChatRequest(string? ThreadId, string Message, List<string>? ImageDataUris = null);
-public record ChatResponse(string Message, string? ThreadId = null);
-```
+**See**: `backend/WebApp.Api/Models/` for request/response models:
+- `ChatRequest.cs` - Thread ID, message, image data URIs
+- `ChatResponse.cs` - Response message, thread ID
+- `ErrorResponse.cs` - RFC 7807 Problem Details
+- `ThreadModels.cs` - Thread creation/deletion models
+- `AgentMetadata.cs` - Agent info for UI display
+
