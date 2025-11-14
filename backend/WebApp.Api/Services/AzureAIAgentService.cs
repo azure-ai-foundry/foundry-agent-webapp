@@ -230,8 +230,11 @@ public class AzureAIAgentService : IDisposable
 
         ResponseItem userMessage = BuildUserMessage(message, imageDataUris);
 
+        ProjectResponsesClient responsesClient
+            = _projectClient.OpenAI.GetProjectResponsesClientForAgent(agent, conversationId);
+
         await foreach (StreamingResponseUpdate update
-            in _projectClient.OpenAI.Responses.CreateResponseStreamingAsync(
+            in responsesClient.CreateResponseStreamingAsync(
                 inputItems: [userMessage],
                 options: new ResponseCreationOptions(),
                 cancellationToken: cancellationToken))
