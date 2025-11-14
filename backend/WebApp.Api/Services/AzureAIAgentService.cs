@@ -1,18 +1,21 @@
-using Azure.AI.Agents.Persistent;
+using Azure.AI.Projects;
+using Azure.AI.Projects.OpenAI;
 using Azure.Core;
 using Azure.Identity;
-using Microsoft.Agents.AI;
+using OpenAI.Responses;
 using System.Runtime.CompilerServices;
 using WebApp.Api.Models;
 
 namespace WebApp.Api.Services;
 
+#pragma warning disable OPENAI001
+
 public class AzureAIAgentService : IDisposable
 {
-    private readonly PersistentAgentsClient _client;
+    private readonly AIProjectClient _projectClient;
     private readonly string _agentId;
     private readonly ILogger<AzureAIAgentService> _logger;
-    private AIAgent? _agent;
+    private AgentVersion? _latestAgentVersion;
     private AgentMetadataResponse? _cachedMetadata; // Cache metadata to avoid repeated calls
     private readonly SemaphoreSlim _agentLock = new(1, 1);
     private UsageInfo? _lastRunUsage;
@@ -60,8 +63,8 @@ public class AzureAIAgentService : IDisposable
         }
 
         // Create client for Azure AI Agent Service
-        _client = new PersistentAgentsClient(endpoint, credential);
-        
+        _projectClient = new AIProjectClient(new Uri(endpoint), credential);
+
         _logger.LogInformation("Azure AI Agent Service client initialized successfully");
         
         // Pre-load agent at startup (matches Azure sample pattern in gunicorn.conf.py)
@@ -80,26 +83,27 @@ public class AzureAIAgentService : IDisposable
         });
     }
 
-    private async Task<AIAgent> GetAgentAsync(CancellationToken cancellationToken = default)
+    private async Task<AgentVersion> GetAgentAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         
-        if (_agent != null)
-            return _agent;
+        if (_latestAgentVersion != null)
+            return _latestAgentVersion;
 
         await _agentLock.WaitAsync(cancellationToken);
         try
         {
-            if (_agent != null)
-                return _agent;
+            if (_latestAgentVersion != null)
+                return _latestAgentVersion;
 
             _logger.LogInformation("Loading existing agent from Azure AI Agent Service: {AgentId}", _agentId);
             
-            // Get the existing agent by ID (using Agent Framework SDK helper)
-            _agent = await _client.GetAIAgentAsync(_agentId);
-            
+            // Get the existing agent
+            AgentRecord agentRecord = await _projectClient.Agents.GetAgentAsync(_agentId, cancellationToken);
+            _latestAgentVersion = agentRecord.Versions.Latest;
+
             _logger.LogInformation("Successfully connected to existing Azure AI Agent: {AgentId}", _agentId);
-            return _agent;
+            return _latestAgentVersion;
         }
         catch (Exception ex)
         {
@@ -136,21 +140,18 @@ public class AzureAIAgentService : IDisposable
         }
         
         var agent = await GetAgentAsync(cancellationToken);
-        
-        // Get the underlying PersistentAgent to access all properties
-        // The AIAgent wrapper doesn't expose all properties, so we retrieve the original
-        var persistentAgent = await _client.Administration.GetAgentAsync(_agentId, cancellationToken);
-        
+        PromptAgentDefinition? promptAgentDefinition = (agent.Definition as PromptAgentDefinition);
+
         _cachedMetadata = new AgentMetadataResponse
         {
-            Id = persistentAgent.Value.Id,
+            Id = agent.Id,//persistentAgent.Value.Id,
             Object = "agent",
-            CreatedAt = persistentAgent.Value.CreatedAt.ToUnixTimeSeconds(),
-            Name = persistentAgent.Value.Name ?? "AI Assistant",
-            Description = persistentAgent.Value.Description,
-            Model = persistentAgent.Value.Model,
-            Instructions = persistentAgent.Value.Instructions,
-            Metadata = persistentAgent.Value.Metadata?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+            CreatedAt = agent.CreatedAt.ToUnixTimeSeconds(),
+            Name = agent.Name ?? "AI Assistant",
+            Description = agent.Description,
+            Model = promptAgentDefinition?.Model ?? string.Empty,
+            Instructions = promptAgentDefinition?.Instructions ?? string.Empty,
+            Metadata = agent.Metadata?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
         };
         
         _logger.LogInformation("Cached agent metadata for future requests");
@@ -163,29 +164,32 @@ public class AzureAIAgentService : IDisposable
         
         try
         {
-            _logger.LogInformation("Creating new conversation thread");
+            _logger.LogInformation("Creating new conversation");
             
             // Use persistent client to create thread with metadata
-            var metadata = new Dictionary<string, string>();
-            
+            ProjectConversationCreationOptions conversationOptions = new();
+
             if (!string.IsNullOrEmpty(firstMessage))
             {
                 // Store title in metadata (truncate to 50 chars)
                 var title = firstMessage.Length > 50 
                     ? firstMessage[..50] + "..."  // Use range operator instead of Substring
                     : firstMessage;
-                metadata["title"] = title;
+                conversationOptions.Metadata["title"] = title;
             }
-            
-            var thread = await _client.Threads.CreateThreadAsync(
-                metadata: metadata.Count > 0 ? metadata : null,
-                cancellationToken: cancellationToken);
-            
-            var threadId = thread.Value.Id;
-            
-            _logger.LogInformation("Created conversation thread: {ThreadId} with title: {Title}", 
-                threadId, metadata.GetValueOrDefault("title", "New Conversation"));
-            return threadId;
+
+            ProjectConversation conversation
+                = await _projectClient.OpenAI.Conversations.CreateProjectConversationAsync(
+                    conversationOptions,
+                    cancellationToken);
+
+            _logger.LogInformation(
+                "Created conversation: {ConversationId} with title: {Title}", 
+                conversation.Id,
+                conversation.Metadata.TryGetValue("title", out string? metadataTitle)
+                    ? metadataTitle
+                    : "New Conversation");
+            return conversation.Id;
         }
         catch (OperationCanceledException)
         {
@@ -204,7 +208,7 @@ public class AzureAIAgentService : IDisposable
     /// Returns chunks of text as they arrive, capturing usage metrics for the run.
     /// </summary>
     public async IAsyncEnumerable<string> StreamMessageAsync(
-        string threadId,
+        string conversationId,
         string message,
         List<string>? imageDataUris = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -213,100 +217,78 @@ public class AzureAIAgentService : IDisposable
         
         var agent = await GetAgentAsync(cancellationToken);
         
-        _logger.LogInformation("Streaming message to thread: {ThreadId}, ImageCount: {ImageCount}", 
-            threadId, imageDataUris?.Count ?? 0);
+        _logger.LogInformation(
+            "Streaming message to conversation: {ConversationId}, ImageCount: {ImageCount}", 
+            conversationId,
+            imageDataUris?.Count ?? 0);
         
         if (string.IsNullOrWhiteSpace(message))
         {
-            _logger.LogWarning("Attempted to stream empty message to thread {ThreadId}", threadId);
+            _logger.LogWarning("Attempted to stream empty message to conversation {ConversationId}", conversationId);
             throw new ArgumentException("Message cannot be null or whitespace", nameof(message));
         }
 
-        // The provided threadId is already a persistent thread identifier created by CreateThreadAsync
-        var messageContent = BuildMessageContent(message, imageDataUris);
-        
-        await _client.Messages.CreateMessageAsync(
-            threadId: threadId,
-            role: MessageRole.User,
-            contentBlocks: messageContent,
-            cancellationToken: cancellationToken);
-        
-        await foreach (var chunk in StreamAgentResponseAsync(threadId, _agentId, cancellationToken))
+        ResponseItem userMessage = BuildUserMessage(message, imageDataUris);
+
+        await foreach (StreamingResponseUpdate update
+            in _projectClient.OpenAI.Responses.CreateResponseStreamingAsync(
+                inputItems: [userMessage],
+                options: new ResponseCreationOptions(),
+                cancellationToken: cancellationToken))
         {
-            yield return chunk;
+            if (update is StreamingResponseOutputTextDeltaUpdate deltaUpdate)
+            {
+                yield return deltaUpdate.Delta;
+            }
+            if (update is StreamingResponseCompletedUpdate completedUpdate)
+            {
+                _lastRunUsage = ExtractUsageInfo(completedUpdate.Response.Usage);
+            }
         }
-        
-        _logger.LogInformation("Completed streaming response for thread: {ThreadId}", threadId);
+
+        _logger.LogInformation("Completed streaming response for thread: {ConversationId}", conversationId);
     }
 
     /// <summary>
     /// Builds message content blocks from text and optional image data URIs.
     /// Images are encoded as base64 data URIs for inline vision analysis.
     /// </summary>
-    private static List<MessageInputContentBlock> BuildMessageContent(string message, List<string>? imageDataUris)
+    private static ResponseItem BuildUserMessage(string message, List<string>? imageDataUris)
     {
-        var messageContent = new List<MessageInputContentBlock>
-        {
-            new MessageInputTextBlock(message)
-        };
-        
-        if (imageDataUris != null)
-        {
-            foreach (var dataUri in imageDataUris)
-            {
-                var imageUriParam = new MessageImageUriParam(uri: dataUri);
-                messageContent.Add(new MessageInputImageUriBlock(imageUriParam));
-            }
-        }
-        
-        return messageContent;
-    }
+        List<ResponseContentPart> messageContentParts =
+        [
+            ResponseContentPart.CreateInputTextPart(message),
+        ];
 
-    /// <summary>
-    /// Streams agent response chunks and captures usage metrics from the run.
-    /// Yields text content as it arrives and stores token usage when run completes.
-    /// </summary>
-    private async IAsyncEnumerable<string> StreamAgentResponseAsync(
-        string persistentThreadId,
-        string agentId,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var streamingUpdates = _client.Runs.CreateRunStreamingAsync(
-            threadId: persistentThreadId,
-            agentId: agentId,
-            cancellationToken: cancellationToken);
-        
-        _lastRunUsage = null;
-        
-        await foreach (var streamingUpdate in streamingUpdates)
+        foreach (string imageDataUri in imageDataUris ?? [])
         {
-            if (streamingUpdate is MessageContentUpdate contentUpdate)
+            // data:[<media-type>][;base64],<data>
+            if (imageDataUri.StartsWith("data:"))
             {
-                var text = contentUpdate.Text;
-                if (!string.IsNullOrEmpty(text))
-                {
-                    yield return text;
-                }
+                string mediaType = imageDataUri["data:".Length..imageDataUri.IndexOf(';')];
+                BinaryData imageBytes = BinaryData.FromBytes(
+                    Convert.FromBase64String(imageDataUri[(imageDataUri.IndexOf(',') + 1)..]));
+                messageContentParts.Add(ResponseContentPart.CreateInputImagePart(imageBytes, mediaType));
             }
-            else if (streamingUpdate is RunUpdate runUpdate 
-                && runUpdate.UpdateKind == StreamingUpdateReason.RunCompleted
-                && runUpdate.Value?.Usage != null)
+            else
             {
-                _lastRunUsage = ExtractUsageInfo(runUpdate.Value.Usage);
+                messageContentParts.Add(ResponseContentPart.CreateInputImagePart(new Uri(imageDataUri)));
             }
         }
+
+        return ResponseItem.CreateUserMessageItem(messageContentParts);
     }
 
     /// <summary>
     /// Extracts token usage metrics from Azure AI Agents run usage data.
     /// </summary>
-    private static UsageInfo ExtractUsageInfo(RunCompletionUsage usage)
+    private static UsageInfo ExtractUsageInfo(ResponseTokenUsage usage)
     {
         return new UsageInfo
         {
-            PromptTokens = (int)usage.PromptTokens,
-            CompletionTokens = (int)usage.CompletionTokens,
-            TotalTokens = (int)usage.TotalTokens
+            PromptTokens = usage.InputTokenCount,
+            CompletionTokens = usage.OutputTokenCount,
+            TotalTokens = usage.TotalTokenCount
         };
     }
 
