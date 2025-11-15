@@ -1,0 +1,21 @@
+{
+  // GitHub Copilot Configuration
+  "github.copilot.enable": {
+    "*": true
+  },
+  
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  
+  // Disable all markdown validation
+  "markdown.validate.enabled": false,
+  "markdown.validate.ignoredLinks": ["**"],
+  
+  // Disable specific language features that might cause problems
+  "[markdown]": {
+    "editor.defaultFormatter": null,
+    "editor.formatOnSave": false
+  }, 
+
+  /// Enable nested agents markdown files for chat
+  "chat.useNestedAgentsMdFiles": true
+}

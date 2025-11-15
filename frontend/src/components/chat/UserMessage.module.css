@@ -1,0 +1,96 @@
+/* Reduce padding on user message to match Azure sample pattern */
+.userMessage {
+  padding-top: 0;
+  padding-bottom: 0;
+  gap: 2px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.attachmentItem {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--colorNeutralBackground3);
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.attachmentIcon {
+  color: var(--colorNeutralForeground2);
+  flex-shrink: 0;
+}
+
+.attachmentInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.attachmentName {
+  font-weight: 500;
+  color: var(--colorNeutralForeground1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentSize {
+  color: var(--colorNeutralForeground3);
+  font-size: 0.75rem;
+}
+
+.thumbnailItem {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--colorNeutralStroke1);
+  background-color: var(--colorNeutralBackground1);
+}
+
+.thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholderIcon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--colorNeutralForeground3);
+}
+
+.sizeBadge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 10px;
+  padding: 2px 4px;
+}

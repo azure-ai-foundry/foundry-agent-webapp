@@ -1,0 +1,72 @@
+# Dependencies (exclude ALL node_modules directories)
+**/node_modules
+node_modules
+npm-debug.log
+
+# Build outputs (exclude ALL build directories)
+.next
+out
+build
+**/dist
+dist
+bin
+obj
+**/bin/
+**/obj/
+**/build/
+
+# Testing
+coverage
+.vs
+
+# Misc
+.DS_Store
+*.pem
+
+# Environment files (will be set via build args or runtime env vars)
+.env*.local
+.env
+.env.development
+.env.production
+
+# NPM Configuration (INCLUDE .npmrc for custom registries)
+# If you use a custom npm registry, add .npmrc to frontend/ directory
+# and it will be copied into Docker builds
+# Note: For private registries requiring authentication, use build secrets:
+#   docker build --secret id=npmrc,src=frontend/.npmrc ...
+# DO NOT include .npmrc - it gets copied to support custom registries
+
+# Git
+.git
+.gitignore
+.github
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.override.yml
+
+# Dev containers
+.devcontainer
+
+# Azure (not needed in container)
+.azure
+azure.yaml
+azure.yaml.json
+
+# Infrastructure (not needed in container)
+infra
+
+# Documentation (not needed in container)
+README.md
+*.md
+docs
+
+# IDE and scripts (not needed in container)
+.vscode
+.idea
+scripts
+
+# Hooks (not needed in container)
+hooks

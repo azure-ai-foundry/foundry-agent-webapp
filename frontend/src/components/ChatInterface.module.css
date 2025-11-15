@@ -1,0 +1,105 @@
+/* Chat container - clean, full width */
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Messages container - scrolling area */
+.messagesContainer {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2rem 1.5rem;
+  background-color: var(--colorNeutralBackground1);
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Messages wrapper - constrain max width for readability */
+.messagesWrapper {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Upload spinner container */
+.uploadSpinner {
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--colorNeutralBackground1);
+  border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+/* Screen reader only content */
+:global(.sr-only) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Error message styling */
+.errorMessage {
+  padding: 1rem;
+  background-color: var(--colorPaletteRedBackground1);
+  color: var(--colorPaletteRedForeground1);
+  border-top: 1px solid var(--colorPaletteRedBorder1);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Scrollbar styling */
+.messagesContainer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messagesContainer::-webkit-scrollbar-track {
+  background: var(--colorNeutralBackground3);
+  border-radius: 4px;
+}
+
+.messagesContainer::-webkit-scrollbar-thumb {
+  background: var(--colorNeutralStroke1);
+  border-radius: 4px;
+}
+
+.messagesContainer::-webkit-scrollbar-thumb:hover {
+  background: var(--colorNeutralStroke2);
+}
+
+/* Chat input area with wave animation */
+.chatInputArea {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  background: var(--colorNeutralBackground1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Error message wrapper - matches chat input width exactly */
+.errorWrapper {
+  width: 100%;
+  max-width: 900px;
+  padding: 0 1rem;
+  box-sizing: border-box;
+}

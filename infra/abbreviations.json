@@ -1,0 +1,7 @@
+{
+  "resourcesResourceGroups": "rg-",
+  "containerRegistryRegistries": "cr",
+  "appManagedEnvironments": "cae-",
+  "appContainerApps": "ca-",
+  "operationalInsightsWorkspaces": "law-"
+}

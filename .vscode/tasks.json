@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Local Dev Servers",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/scripts/start-local-dev.ps1 -SkipBrowser",
+      "isBackground": false,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false
+      }
+    }
+  ]
+}

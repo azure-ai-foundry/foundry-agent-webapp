@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "entraSpaClientId": {
+      "value": "${ENTRA_SPA_CLIENT_ID}"
+    },
+    "webImageName": {
+      "value": "${SERVICE_WEB_IMAGE_NAME=}"
+    },
+    "aiAgentEndpoint": {
+      "value": "${AI_AGENT_ENDPOINT}"
+    },
+    "aiAgentId": {
+      "value": "${AI_AGENT_ID}"
+    },
+    "aiFoundryResourceGroup": {
+      "value": "${AI_FOUNDRY_RESOURCE_GROUP}"
+    },
+    "aiFoundryResourceName": {
+      "value": "${AI_FOUNDRY_RESOURCE_NAME}"
+    }
+  }
+}

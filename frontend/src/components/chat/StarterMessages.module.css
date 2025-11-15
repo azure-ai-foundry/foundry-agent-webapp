@@ -1,0 +1,75 @@
+.zeroprompt {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 100%;
+  margin-bottom: 16px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+
+  max-width: 800px;
+  padding: 0 16px;
+
+  text-align: center;
+}
+
+.emptyStateAgentIcon {
+  width: 48px;
+  height: 48px;
+}
+
+.welcome,
+.caption {
+  text-align: center;
+  text-wrap: balance;
+}
+
+.caption {
+  max-width: 600px;
+}
+
+.promptStarters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+}
+
+.promptStarters > * {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* Style starter prompt buttons */
+.promptStarters button {
+  min-width: 0;
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: 12px;
+  white-space: normal;
+  background-color: transparent;
+}
+
+.promptStarters button:hover {
+  background-color: var(--colorNeutralBackground2);
+}
+
+/* Responsive behavior for smaller screens */
+@media (width <= 768px) {
+  .promptStarters {
+    flex-direction: column;
+    gap: 8px;
+    height: auto;
+  }
+}
