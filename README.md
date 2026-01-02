@@ -1,6 +1,6 @@
-# AI Agent Web App
+# Mazhar-AI Web App
 
-AI-powered web application with Entra ID authentication and Azure AI Foundry Agent Service integration. Deploy to Azure Container Apps with a single command.
+A secure web interface for interacting with the Mazhar-AI agent via Azure AI Foundry.
 
 ## Quick Start
 
