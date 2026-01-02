@@ -14,8 +14,36 @@ This command:
 3. Builds and deploys your application
 4. Opens browser to your deployed app
 
-**Local Development**: http://localhost:5173 (frontend), http://localhost:8080 (backend)  
+**Local Development**: http://localhost:5173 (frontend), http://localhost:8080 (backend)
 **Production**: https://<your-app>.azurecontainerapps.io
+
+## 🎯 Mazhar-ai Agent - The Calm Architect
+
+This repository is configured to connect to **Mazhar-ai**, an AI agent embodying strategic clarity, disciplined depth, and restrained creation.
+
+### Quick Setup for Mazhar-ai
+
+```bash
+# 1. Configure the agent connection
+./deployment/scripts/configure-mazhar-ai.sh
+
+# 2. Create your agent in Azure AI Foundry (https://ai.azure.com)
+#    - Name: Mazhar-ai
+#    - System Instructions: Copy from docs/mazhar-ai-system-instructions.md
+
+# 3. Deploy
+azd up
+```
+
+**📖 Complete Guide**: See [docs/MAZHAR_AI_SETUP.md](docs/MAZHAR_AI_SETUP.md) for:
+- Detailed setup instructions
+- System instructions incorporating the 2026 Vision Board
+- Personality configuration
+- Troubleshooting
+
+**🧠 Core Principles**: Clarity as Power. Restraint as Leverage. Creation as Service.
+
+---
 
 ## Prerequisites
 
@@ -125,6 +153,7 @@ azd env set AI_AGENT_ID <agent-name>
 | `azd up` | Initial deployment (infra + code) | 10-12 min |
 | `.\deployment\scripts\deploy.ps1` | Deploy code changes only | 3-5 min |
 | `.\deployment\scripts\start-local-dev.ps1` | Start local development | Instant |
+| `.\deployment\scripts\configure-mazhar-ai.sh` | Configure Mazhar-ai agent connection | Instant |
 | `.\deployment\scripts\list-agents.ps1` | List agents in your project | Instant |
 | `azd provision` | Re-deploy infrastructure / update RBAC | 2-3 min |
 | `azd down --force --purge` | Delete all Azure resources | 2-3 min |
