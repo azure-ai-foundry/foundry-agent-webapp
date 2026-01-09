@@ -17,6 +17,10 @@ hooks:
       shell: pwsh
       run: ./deployment/hooks/preprovision.ps1
       continueOnError: false
+    posix:
+      shell: pwsh
+      run: ./deployment/hooks/preprovision.ps1
+      continueOnError: false
 
   # Phase 2: Provision (automatic - Bicep templates with placeholder image)
   
@@ -26,10 +30,18 @@ hooks:
       shell: pwsh
       run: ./deployment/hooks/postprovision.ps1
       continueOnError: false
+    posix:
+      shell: pwsh
+      run: ./deployment/hooks/postprovision.ps1
+      continueOnError: false
 
   # Cleanup Entra app and config files
   postdown:
     windows:
+      shell: pwsh
+      run: ./deployment/hooks/postdown.ps1
+      continueOnError: false
+    posix:
       shell: pwsh
       run: ./deployment/hooks/postdown.ps1
       continueOnError: false
