@@ -271,10 +271,7 @@ For more information, visit: https://learn.microsoft.com/azure/ai-foundry
             if (-not $selectedResource) {
                 Write-Host "Found $($aiFoundryResources.Count) AI Foundry resources." -ForegroundColor Cyan
 
-                $selectedIndex = Select-Index \
-                    -Items $aiFoundryResources \
-                    -Title "Azure AI Foundry resource selection" \
-                    -GetLabel { param($res, $i) "$($res.name)  (RG: $($res.resourceGroup), Location: $($res.location))" }
+                $selectedIndex = Select-Index -Items $aiFoundryResources -Title "Azure AI Foundry resource selection" -GetLabel { param($res, $i) "$($res.name)  (RG: $($res.resourceGroup), Location: $($res.location))" }
 
                 if ($selectedIndex -lt 0) {
                     # Truly non-interactive host: fall back to deterministic selection to avoid failing `azd up`.
