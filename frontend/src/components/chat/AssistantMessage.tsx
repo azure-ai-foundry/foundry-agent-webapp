@@ -1,11 +1,12 @@
-import { Suspense, memo } from 'react';
+import { Suspense, memo, useMemo, useCallback } from 'react';
 import { Spinner, Tooltip } from '@fluentui/react-components';
 import { CopilotMessage } from '@fluentui-copilot/react-copilot-chat';
-import { DocumentRegular, GlobeRegular, FolderRegular } from '@fluentui/react-icons';
+import { DocumentRegular, GlobeRegular, FolderRegular, OpenRegular } from '@fluentui/react-icons';
 import { Markdown } from '../core/Markdown';
 import { AgentIcon } from '../core/AgentIcon';
 import { UsageInfo } from './UsageInfo';
 import { useFormatTimestamp } from '../../hooks/useFormatTimestamp';
+import { parseContentWithCitations } from '../../utils/citationParser';
 import type { IChatItem, IAnnotation } from '../../types/chat';
 import styles from './AssistantMessage.module.css';
 
@@ -29,8 +30,55 @@ function AssistantMessageComponent({
   const showLoadingDots = isStreaming && !message.content;
   const hasAnnotations = message.annotations && message.annotations.length > 0;
   
+  // Parse content with citations for consistent numbering between inline and footnotes
+  const parsedContent = useMemo(() => {
+    if (!hasAnnotations) return null;
+    return parseContentWithCitations(message.content, message.annotations);
+  }, [message.content, message.annotations, hasAnnotations]);
+
+  // Get unique annotations with consistent indices
+  // If the parser found citations (inline placeholders), use those
+  // Otherwise, fall back to displaying all annotations as footnotes
+  const indexedCitations = useMemo(() => {
+    if (parsedContent?.citations && parsedContent.citations.length > 0) {
+      return parsedContent.citations;
+    }
+    // No inline placeholders found - display all annotations as numbered footnotes
+    // Deduplicate by label+type for fallback case
+    if (message.annotations && message.annotations.length > 0) {
+      const seen = new Map<string, { index: number; annotation: IAnnotation; count: number }>();
+      message.annotations.forEach((annotation) => {
+        const key = `${annotation.type}:${annotation.label}:${annotation.url || annotation.fileId || ''}`;
+        if (seen.has(key)) {
+          seen.get(key)!.count++;
+        } else {
+          seen.set(key, { index: seen.size + 1, annotation, count: 1 });
+        }
+      });
+      return Array.from(seen.values());
+    }
+    return [];
+  }, [parsedContent, message.annotations]);
+  
+  // Handle citation click - scroll to footnote or open URL
+  const handleCitationClick = useCallback((index: number, annotation?: IAnnotation) => {
+    if (annotation?.type === 'uri_citation' && annotation.url) {
+      window.open(annotation.url, '_blank', 'noopener,noreferrer');
+    } else {
+      // Scroll to citation in footnotes
+      const citationElement = document.getElementById(`citation-${message.id}-${index}`);
+      if (citationElement) {
+        citationElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        citationElement.classList.add(styles.citationHighlight);
+        setTimeout(() => {
+          citationElement.classList.remove(styles.citationHighlight);
+        }, 2000);
+      }
+    }
+  }, [message.id]);
+  
   // Build citation elements matching Azure AI Foundry style
-  const renderCitation = (annotation: IAnnotation, index: number) => {
+  const renderCitation = (annotation: IAnnotation, index: number, count: number = 1) => {
     const getIcon = () => {
       switch (annotation.type) {
         case 'uri_citation':
@@ -42,10 +90,25 @@ function AssistantMessageComponent({
       }
     };
 
-    const citationNumber = index + 1;
+    const citationNumber = index;
     const tooltipContent = annotation.quote 
-      ? `${annotation.label}\n\n"${annotation.quote.slice(0, 200)}${annotation.quote.length > 200 ? '...' : ''}"`
-      : annotation.label;
+      ? `${annotation.label}${count > 1 ? ` (referenced ${count} times)` : ''}\n\n"${annotation.quote.slice(0, 200)}${annotation.quote.length > 200 ? '...' : ''}"`
+      : `${annotation.label}${count > 1 ? ` (referenced ${count} times)` : ''}`;
+
+    const isClickable = annotation.type === 'uri_citation' && annotation.url;
+
+    const handleClick = () => {
+      if (isClickable) {
+        window.open(annotation.url, '_blank', 'noopener,noreferrer');
+      }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        handleClick();
+      }
+    };
 
     // Render citation button matching Azure AI Foundry style
     return (
@@ -55,29 +118,28 @@ function AssistantMessageComponent({
         relationship="description"
         withArrow
       >
-        <span className={styles.citation}>
+        <span 
+          id={`citation-${message.id}-${citationNumber}`}
+          className={`${styles.citation} ${isClickable ? styles.citationClickable : ''}`}
+          onClick={isClickable ? handleClick : undefined}
+          onKeyDown={isClickable ? handleKeyDown : undefined}
+          role={isClickable ? 'link' : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+        >
           <span className={styles.citationNumber}>{citationNumber}</span>
           <span className={styles.citationContent}>
             {getIcon()}
             <span className={styles.citationLabel}>{annotation.label}</span>
+            {count > 1 && <span className={styles.citationCount}>×{count}</span>}
+            {isClickable && <OpenRegular className={styles.citationExternalIcon} />}
           </span>
         </span>
       </Tooltip>
     );
   };
 
-  const uniqueAnnotations = hasAnnotations
-    ? message.annotations!.reduce<IAnnotation[]>((acc, annotation) => {
-        const key = `${annotation.label}-${annotation.url || annotation.fileId || ''}-${annotation.startIndex ?? ''}`;
-        if (!acc.some(a => `${a.label}-${a.url || a.fileId || ''}-${a.startIndex ?? ''}` === key)) {
-          acc.push(annotation);
-        }
-        return acc;
-      }, [])
-    : [];
-
-  const citations = uniqueAnnotations.map((annotation, index) => 
-    renderCitation(annotation, index)
+  const citations = indexedCitations.map(({ index, annotation, count }) => 
+    renderCitation(annotation, index, count)
   );
   
   return (
@@ -115,7 +177,11 @@ function AssistantMessageComponent({
         </div>
       ) : (
         <Suspense fallback={<Spinner size="small" />}>
-          <Markdown content={message.content} />
+          <Markdown 
+            content={message.content} 
+            annotations={message.annotations}
+            onCitationClick={handleCitationClick}
+          />
         </Suspense>
       )}
     </CopilotMessage>

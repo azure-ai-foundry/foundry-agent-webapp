@@ -2,6 +2,7 @@ import type { Dispatch } from 'react';
 import type { AppAction } from '../types/appState';
 import type { IChatItem } from '../types/chat';
 import type { AppError } from '../types/errors';
+import { isAppError } from '../types/errors';
 import {
   createAppError,
   getErrorCodeFromMessage,
@@ -243,15 +244,8 @@ export class ChatService {
         this.dispatch({ type: 'AUTH_TOKEN_EXPIRED' });
       }
 
-      const isAppError =
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        'message' in error &&
-        'recoverable' in error;
-
-      const appError: AppError = isAppError
-        ? (error as AppError)
+      const appError: AppError = isAppError(error)
+        ? error
         : createAppError(
             error,
             getErrorCodeFromMessage(error),

@@ -9,11 +9,18 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import copy from 'copy-to-clipboard';
 import { Button } from '@fluentui/react-components';
 import { CopyRegular } from '@fluentui/react-icons';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
+import { CitationMarker } from '../chat/CitationMarker';
+import { parseContentWithCitations } from '../../utils/citationParser';
+import type { IAnnotation } from '../../types/chat';
 import styles from './Markdown.module.css';
 
 interface MarkdownProps {
   content: string;
+  /** Annotations for inline citation rendering */
+  annotations?: IAnnotation[];
+  /** Callback when a citation marker is clicked */
+  onCitationClick?: (index: number, annotation?: IAnnotation) => void;
 }
 
 interface CodeBlockProps
@@ -146,41 +153,128 @@ const Heading6: Components['h6'] = ({ children, ...props }) => {
   return <h6 className={styles.heading6} {...props}>{children}</h6>;
 };
 
-export function Markdown({ content }: MarkdownProps) {
-  return (
-    <div className={styles.markdown}>
+// Shared rehype sanitize config
+const rehypeSanitizeConfig = [
+  rehypeSanitize,
+  {
+    ...defaultSchema,
+    tagNames: [...(defaultSchema.tagNames ?? []), 'sub', 'sup'],
+    attributes: {
+      ...defaultSchema.attributes,
+      code: [['className', /^language-./]],
+    },
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+] as [typeof rehypeSanitize, any];
+
+// Shared base components (without paragraph - that varies)
+const baseComponents = {
+  code: CodeBlock,
+  a: Link,
+  ul: UnorderedList,
+  ol: OrderedList,
+  li: ListItem,
+  h1: Heading,
+  h2: Heading2,
+  h3: Heading3,
+  h4: Heading4,
+  h5: Heading5,
+  h6: Heading6,
+};
+
+/**
+ * Renders content with inline citation markers.
+ * Parses [N] markers and replaces them with CitationMarker components.
+ */
+function ContentWithCitations({ 
+  content, 
+  annotations,
+  onCitationClick 
+}: { 
+  content: string; 
+  annotations?: IAnnotation[];
+  onCitationClick?: (index: number, annotation?: IAnnotation) => void;
+}) {
+  const parsed = useMemo(
+    () => parseContentWithCitations(content, annotations),
+    [content, annotations]
+  );
+
+  // If no citations, render plain markdown
+  if (parsed.citations.length === 0) {
+    return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[
-          [
-            rehypeSanitize,
-            {
-              ...defaultSchema,
-              tagNames: [...(defaultSchema.tagNames ?? []), 'sub', 'sup'],
-              attributes: {
-                ...defaultSchema.attributes,
-                code: [['className', /^language-./]],
-              },
-            },
-          ],
-        ]}
-        components={{
-          p: Paragraph,
-          code: CodeBlock,
-          a: Link,
-          ul: UnorderedList,
-          ol: OrderedList,
-          li: ListItem,
-          h1: Heading,
-          h2: Heading2,
-          h3: Heading3,
-          h4: Heading4,
-          h5: Heading5,
-          h6: Heading6,
-        }}
+        rehypePlugins={[rehypeSanitizeConfig]}
+        components={{ p: Paragraph, ...baseComponents }}
       >
         {content}
       </ReactMarkdown>
+    );
+  }
+
+  // Build citation index map for quick lookup
+  const citationMap = new Map(
+    parsed.citations.map(c => [c.index, c.annotation])
+  );
+
+  // Custom text renderer that handles [N] markers
+  const TextWithCitations: Components['p'] = ({ children }) => {
+    // children can be a string or array of React nodes
+    const processNode = (node: React.ReactNode): React.ReactNode => {
+      if (typeof node !== 'string') {
+        return node;
+      }
+
+      // Split text on citation markers [N]
+      const parts = node.split(/(\[\d+\])/g);
+      
+      return parts.map((part, i) => {
+        const match = part.match(/^\[(\d+)\]$/);
+        if (match) {
+          const idx = parseInt(match[1], 10);
+          const annotation = citationMap.get(idx);
+          return onCitationClick ? (
+            <CitationMarker
+              key={`citation-${idx}-${i}`}
+              index={idx}
+              annotation={annotation}
+              onClick={onCitationClick}
+            />
+          ) : (
+            <sup key={`citation-${idx}-${i}`}>[{idx}]</sup>
+          );
+        }
+        return part;
+      });
+    };
+
+    const processed = Array.isArray(children)
+      ? children.map(processNode)
+      : processNode(children);
+
+    return <span className={styles.paragraph}>{processed} </span>;
+  };
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkBreaks]}
+      rehypePlugins={[rehypeSanitizeConfig]}
+      components={{ p: TextWithCitations, ...baseComponents }}
+    >
+      {parsed.processedText}
+    </ReactMarkdown>
+  );
+}
+
+export function Markdown({ content, annotations, onCitationClick }: MarkdownProps) {
+  return (
+    <div className={styles.markdown}>
+      <ContentWithCitations 
+        content={content} 
+        annotations={annotations}
+        onCitationClick={onCitationClick}
+      />
     </div>
   );
 }

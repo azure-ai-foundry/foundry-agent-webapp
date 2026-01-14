@@ -178,10 +178,31 @@ npm install --legacy-peer-deps
 | Component | Purpose |
 |-----------|---------|
 | `AgentPreview.tsx` | Container wiring chat state to controlled `ChatInterface` |
-| `ChatInterface.tsx` | Stateless controlled UI; renders messages, input, errors |
-| `chat/AssistantMessage.tsx` | Memoized assistant message with streaming support |
+| `ChatInterface.tsx` | Stateless controlled UI; renders messages, input, errors, BuiltWithBadge |
+| `chat/AssistantMessage.tsx` | Memoized assistant message with streaming + citation footnotes |
 | `chat/UserMessage.tsx` | Memoized user message with image thumbnail previews |
 | `chat/ChatInput.tsx` | File uploads, character counter, cancel streaming button |
+| `chat/CitationMarker.tsx` | Inline superscript citation badge with tooltip + click handler |
+| `core/Markdown.tsx` | Renders markdown with inline citation markers via `ContentWithCitations` |
+| `core/BuiltWithBadge.tsx` | "Built with Azure AI Foundry" link badge (centered under input) |
+
+## Project-Specific: Citation System
+
+**Parser**: `frontend/src/utils/citationParser.ts`
+
+Handles Azure AI Agent citation formats:
+- Assistants/Responses API: `【4:0†source】`, `【13†myfile.pdf】`
+- Azure OpenAI On Your Data: `[doc1]`, `[doc2]`
+
+**Flow**:
+1. `parseContentWithCitations()` replaces placeholders with `[N]` markers
+2. `Markdown.tsx` renders `CitationMarker` components for each `[N]`
+3. Clicking inline marker scrolls to footnote (with highlight animation) or opens URL
+4. `AssistantMessage.tsx` renders footnote list with icons by type (URI/file/document)
+
+**Key Types** (`frontend/src/types/chat.ts`):
+- `IAnnotation` - Citation metadata (type, label, url, fileId, quote, textToReplace)
+- `IndexedCitation` - Parsed citation with display index
 
 ## Project-Specific: File Upload Validation
 
@@ -223,3 +244,9 @@ Key patterns:
 - ✅ Buttons have `aria-label` when icon-only
 - ✅ Focus returns to input after sending
 - ✅ Character counter linked via `aria-describedby`
+
+## Related Skills
+
+- **implementing-chat-streaming** - SSE streaming patterns and frontend state flow
+- **troubleshooting-authentication** - MSAL popup issues and token debugging
+- **testing-with-playwright** - Browser testing and accessibility validation

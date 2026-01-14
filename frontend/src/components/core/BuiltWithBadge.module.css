@@ -1,9 +1,7 @@
 .badge {
-  display: grid;
-  grid-template-areas:
-    'logo description'
-    'logo brand';
-  gap: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   height: auto;
   border: none;
   background: transparent;
@@ -13,29 +11,22 @@
 
 .logo {
   display: grid;
-  grid-area: logo;
   place-items: center;
   color: var(--colorBrandForeground1);
+  margin-right: 2px;
 }
 
-.description {
-  grid-area: description;
+.text {
   color: var(--colorNeutralForeground3);
 }
 
 .brand {
-  display: flex;
-  grid-area: brand;
-  gap: 4px;
-  align-items: center;
   color: var(--colorNeutralForeground1);
-  white-space: nowrap;
-  flex-wrap: nowrap;
 }
 
 .badge:hover {
-  & .brand,
-  & .description {
+  & .text,
+  & .brand {
     text-decoration: underline;
   }
 }

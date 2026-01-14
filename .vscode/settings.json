@@ -19,10 +19,6 @@
   // See: https://code.visualstudio.com/docs/copilot/customization/agent-skills
   "chat.useAgentSkills": true,
 
-  // Enable Claude skills compatibility (.claude/skills/ folders)
-  // See: https://code.visualstudio.com/updates/v1_107#_reuse-your-claude-skills-experimental
-  "chat.useClaudeSkills": true,
-
   // Enable custom agents as subagents (allows agents to delegate to other agents)
   // See: https://code.visualstudio.com/updates/v1_107#_run-agents-as-subagents-experimental
   "chat.customAgentInSubagent.enabled": true,
@@ -52,9 +48,6 @@
   // ============================================
   // Chat View Experience
   // ============================================
-  
-  // Start with empty chat on restart (access previous sessions from sidebar)
-  "chat.viewRestorePreviousSession": false,
 
   // Show chat title for easy session identification
   "chat.viewTitle.enabled": true,

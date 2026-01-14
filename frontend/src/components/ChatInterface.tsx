@@ -1,14 +1,14 @@
-import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useState } from "react";
 import { AssistantMessage } from "./chat/AssistantMessage";
 import { UserMessage } from "./chat/UserMessage";
 import { StarterMessages } from "./chat/StarterMessages";
 import { ChatInput } from "./chat/ChatInput";
 import { Waves } from "./animations/Waves";
 import { ErrorMessage } from "./core/ErrorMessage";
+import { BuiltWithBadge } from "./core/BuiltWithBadge";
 import type { IChatItem } from "../types/chat";
 import type { AppState } from "../types/appState";
 import type { AppError } from "../types/errors";
-import type { ChatInterfaceRef } from "../App";
 import styles from './ChatInterface.module.css';
 
 interface ChatInterfaceProps {
@@ -26,10 +26,11 @@ interface ChatInterfaceProps {
   agentName?: string;
   agentDescription?: string;
   agentLogo?: string;
+  starterPrompts?: string[];
 }
 
-export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((props, ref) => {
-  const { messages, status, error, streamingMessageId, onSendMessage, onClearError, onOpenSettings, onNewChat, onCancelStream, hasMessages, disabled, agentName, agentDescription, agentLogo } = props;
+export const ChatInterface: React.FC<ChatInterfaceProps> = (props) => {
+  const { messages, status, error, streamingMessageId, onSendMessage, onClearError, onOpenSettings, onNewChat, onCancelStream, hasMessages, disabled, agentName, agentDescription, agentLogo, starterPrompts } = props;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [liveRegionMessage, setLiveRegionMessage] = useState<string>('');
   
@@ -56,12 +57,6 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
       return () => clearTimeout(timer);
     }
   }, [isStreaming, status, messages]);
-
-  // Expose ref methods (no-op, controlled by parent now)
-  useImperativeHandle(ref, () => ({
-    clearChat: () => {}, // Parent controls via AppContext
-    loadConversation: async () => {}, // Parent controls via AppContext
-  }));
 
   const handleSendMessage = (messageText: string, files?: File[]) => {
     if (!messageText.trim() || disabled) return;
@@ -97,6 +92,7 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
               agentName={agentName}
               agentDescription={agentDescription}
               agentLogo={agentLogo}
+              starterPrompts={starterPrompts}
               onPromptClick={handleStarterPromptClick}
             />
           ) : (
@@ -155,7 +151,8 @@ export const ChatInterface = forwardRef<ChatInterfaceRef, ChatInterfaceProps>((p
           isStreaming={isStreaming}
           onCancelStream={isStreaming && onCancelStream ? onCancelStream : undefined}
         />
+        <BuiltWithBadge className={styles.builtWithBadge} />
       </div>
     </div>
   );
-});
+};

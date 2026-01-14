@@ -14,8 +14,9 @@ ASP.NET Core 9 Minimal API application that:
 
 - **Single Container**: Serves both API and frontend from `wwwroot`
 - **JWT Authentication**: Validates tokens with `Chat.ReadWrite` scope
-- **AI Agent Integration**: Azure.AI.Agents.Persistent v1.2.0-beta.6 (pinned)
+- **AI Agent Integration**: Azure.AI.Projects v1.2.0-beta.5 (v2 Agents API)
 - **Streaming**: SSE-based chat streaming with cancellation support
+- **Starter Prompts**: Dynamic prompts from agent metadata
 - **Environment-Aware Auth**: ChainedTokenCredential (dev) / ManagedIdentityCredential (prod)
 
 ## Project Structure
@@ -26,9 +27,11 @@ WebApp.Api/
 ├── Models/                       # Request/response DTOs
 │   ├── ChatRequest.cs
 │   ├── ChatResponse.cs
+│   ├── AgentMetadata.cs
+│   ├── StreamChunk.cs
 │   └── ConversationModels.cs
 ├── Services/
-│   └── AzureAIAgentService.cs   # AI Foundry client + streaming
+│   └── AgentFrameworkService.cs  # AI Foundry v2 Agents API + streaming
 └── appsettings.json              # Configuration (no secrets)
 ```
 
@@ -105,12 +108,11 @@ dotnet list package --vulnerable
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Azure.AI.Agents.Persistent | 1.2.0-beta.6 | AI Foundry Agent Service SDK (pinned) |
-| Azure.Identity | Latest | ManagedIdentityCredential for Azure auth |
-| Microsoft.Identity.Web | Latest | JWT Bearer authentication |
-| Microsoft.AspNetCore.OpenApi | Latest | OpenAPI documentation |
+| Azure.AI.Projects | 1.2.0-beta.5 | AI Foundry v2 Agents API SDK |
+| Azure.Identity | 1.17.1 | ManagedIdentityCredential for Azure auth |
+| Microsoft.Identity.Web | 4.3.0 | JWT Bearer authentication |
 
-**SDK pinning rationale**: Beta SDK pinned to ensure stability until GA release.
+**SDK Note**: Uses v2 Agents API (`/agents/` endpoint) with human-readable agent IDs. See `.github/skills/researching-azure-ai-sdk/SKILL.md` for SDK patterns.
 
 ## Security
 

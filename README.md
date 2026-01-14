@@ -183,7 +183,7 @@ azd env set AI_AGENT_ID <agent-name>
 **Frontend**: React 19 + TypeScript + Vite  
 **Backend**: ASP.NET Core 9 Minimal APIs  
 **Authentication**: Microsoft Entra ID (PKCE flow)  
-**AI Integration**: Azure AI Foundry Agent Service  
+**AI Integration**: Azure AI Foundry v2 Agents API (`Azure.AI.Projects` SDK)  
 **Deployment**: Single container, Azure Container Apps  
 **Local Dev**: Native (no Docker required)
 

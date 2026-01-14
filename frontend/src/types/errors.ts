@@ -70,3 +70,16 @@ export function isRecoverableError(code: ErrorCode): boolean {
   // NETWORK, STREAM, and SERVER errors are typically recoverable with retry
   return code !== 'AUTH' && code !== 'UNKNOWN';
 }
+
+/**
+ * Type guard to check if an unknown value is an AppError
+ */
+export function isAppError(error: unknown): error is AppError {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    'message' in error &&
+    'recoverable' in error
+  );
+}

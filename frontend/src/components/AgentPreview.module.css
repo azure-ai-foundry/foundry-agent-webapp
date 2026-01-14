@@ -14,15 +14,3 @@
   position: relative;
   overflow: hidden;
 }
-
-.builtWithBadge {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  z-index: 10;
-
-  /* Hide on mobile screens */
-  @media (width <= 768px) {
-    display: none;
-  }
-}

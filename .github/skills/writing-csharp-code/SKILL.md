@@ -167,28 +167,29 @@ app.UseAuthorization();    // Enforce scope
 app.MapFallbackToFile("index.html");  // MUST BE LAST
 ```
 
-## Project-Specific: AzureAIAgentService
+## Project-Specific: AgentFrameworkService
 
-**See**: `backend/WebApp.Api/Services/AzureAIAgentService.cs`
+**See**: `backend/WebApp.Api/Services/AgentFrameworkService.cs`
 
 **SDK Package**: `Azure.AI.Projects` v1.2.0-beta.5 (main entry point)
-**Sub-namespaces**: `Azure.AI.Agents.Persistent`, `Azure.AI.Projects.OpenAI`, `OpenAI.Responses`
+**Sub-namespaces**: `Azure.AI.Projects.OpenAI`, `OpenAI.Responses`
 
 **Key patterns**:
-- `IDisposable` implementation with `_agentLock.Dispose()` and `_disposeCts`
+- `IDisposable` implementation with `_agentLock.Dispose()`
 - Disposal guards (`ObjectDisposedException.ThrowIf`) in all public methods
 - Environment-aware credential selection (ChainedTokenCredential vs ManagedIdentityCredential)
 - Cached agent instance with `SemaphoreSlim` for thread safety
 - Configuration validation (`AI_AGENT_ENDPOINT`, `AI_AGENT_ID`)
-- Pre-loads agent at startup via `Task.Run()` for faster first request
 
-**Client Initialization**:
+**v2 Agents API** (uses `/agents/` endpoint with human-readable IDs):
 ```csharp
-AIProjectClient projectClient = new(new Uri(projectEndpoint), credential);
-// Get Responses API client for streaming
+// Get agent metadata via v2 Agents API
+AgentRecord agentRecord = await projectClient.Agents.GetAgentAsync(agentId);
+AgentVersion version = agentRecord.Versions.Latest;
+
+// Use AgentReference for streaming (not the agent object directly)
 ProjectResponsesClient responsesClient = projectClient.OpenAI.GetProjectResponsesClientForAgent(
-    defaultAgent: agentName,
-    defaultConversationId: conversationId);
+    new AgentReference(agentId), conversationId);
 ```
 
 **Streaming Pattern**: Returns `IAsyncEnumerable<StreamChunk>` where `StreamChunk` contains either:
@@ -200,17 +201,19 @@ ProjectResponsesClient responsesClient = projectClient.OpenAI.GetProjectResponse
 - `StreamingResponseOutputItemDoneUpdate` - Item completion (has annotations)
 - `StreamingResponseCompletedUpdate` - Response completion with usage stats
 
-**Image Validation** (in `ValidateImageDataUris()`):
+**Image Validation** (in `BuildUserMessage()`):
 - Maximum 5 images per request
 - Maximum 5MB per image (decoded size)
 - Allowed: `image/png`, `image/jpeg`, `image/gif`, `image/webp`
 - Returns HTTP 400 with validation details if constraints violated
 
-**Annotation Types** (from `Azure.AI.Agents.Persistent`): 
+**Annotation Types** (from `OpenAI.Responses`): 
 - `UriCitationMessageAnnotation` - Bing, Azure AI Search, SharePoint
 - `FileCitationMessageAnnotation` - File search (vector stores)
 - `FilePathMessageAnnotation` - Code interpreter output
 - `ContainerFileCitationMessageAnnotation` - Container file citations
+
+**Starter Prompts**: Parsed from agent metadata (`starterPrompts` key, newline-separated).
 
 ## Project-Specific: Configuration Loading
 
@@ -278,3 +281,9 @@ $asm.GetType("Azure.AI.Projects.OpenAI.ProjectResponsesClient").GetMethods() |
 **When to use**: Beta SDK docs are wrong/missing, IDE can't resolve the type, and GitHub source is unclear.
 
 **Limitation**: Returns raw API surface without intent, relationships, or usage guidance. Prefer contextual methods above.
+
+## Related Skills
+
+- **implementing-chat-streaming** - SSE streaming patterns and backend endpoint implementation
+- **troubleshooting-authentication** - MSAL/JWT debugging for 401 errors
+- **researching-azure-ai-sdk** - SDK research workflow and sample repositories

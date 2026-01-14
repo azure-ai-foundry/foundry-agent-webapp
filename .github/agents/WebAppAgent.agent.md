@@ -2,6 +2,7 @@
 description: Azure AI Foundry Agent Service development mode - SDK research, MCP integration, and agent implementation patterns
 tools: ['execute/getTerminalOutput', 'execute/runTask', 'execute/createAndRunTask', 'execute/runInTerminal', 'execute/testFailure', 'execute/runTests', 'read/terminalSelection', 'read/terminalLastCommand', 'read/getTaskOutput', 'read/problems', 'read/readFile', 'edit', 'search', 'web', 'agent', 'microsoftdocs/mcp/*', 'playwright/*', 'todo']
 model: Claude Opus 4.5 (copilot)
+name: Web App Agent
 ---
 
 # Azure AI Agent Development Mode
@@ -12,11 +13,9 @@ model: Claude Opus 4.5 (copilot)
 
 ## Documentation Layers
 
-Avoid token waste by understanding what lives where:
-
-1. **copilot-instructions.md** (always loaded) → Architecture, essential rules
-2. **Skills** (loaded on-demand) → Deployment, SDK research, testing, coding standards + project-specific details
-3. **This file** → Agent mode configuration, MCP tool strategy, project context
+1. **copilot-instructions.md** (always loaded) → Purpose, skill index, delegation hints
+2. **Skills** (loaded on-demand) → Domain-specific patterns, SDK details, deployment config
+3. **This file** → Agent mode configuration, MCP tool strategy
 
 **Your role**: Research SDKs, validate with tests, connect documentation sources.
 
@@ -103,30 +102,4 @@ Use Playwright tools in priority order: console logs → network → accessibili
 
 **Workflow**: Edit code → Save → Check terminal for errors → Test in browser
 
-## Project-Specific Context
 
-**Architecture**: Single-conversation UI (full-width chat, no sidebar/history)
-**State**: Redux-style via React Context + useReducer with dev logging
-
-### SDK Details
-
-**Main Package**: `Azure.AI.Projects` v1.2.0-beta.5  
-**Sub-namespaces**: `Azure.AI.Agents.Persistent`, `Azure.AI.Projects.OpenAI`, `OpenAI.Responses`  
-
-**Key Types**:
-- `AIProjectClient` → Main entry point, get via `new AIProjectClient(new Uri(endpoint), credential)`
-- `ProjectResponsesClient` → Responses API, get via `projectClient.OpenAI.GetProjectResponsesClientForAgent()`
-- `ProjectConversation` → Conversation state, get via `projectClient.OpenAI.Conversations.CreateProjectConversation()`
-- `StreamingResponseOutputTextDeltaUpdate` → Text delta chunks during streaming
-- `StreamingResponseOutputItemDoneUpdate` → Item completion with annotations
-- `AgentVersion` → Agent metadata including name and ID
-
-**Streaming Pattern**: `CreateResponseStreamingAsync()` returns `IAsyncEnumerable<StreamingUpdate>`, backend yields `StreamChunk` containing either text deltas or annotations for SSE.
-
-### AI Agent Service Configuration
-
-**Auto-discovery** (`azd up`): Searches subscription for AI Foundry resources → prompts user to select if multiple exist → discovers agents via REST API → validates RBAC permissions → configures everything automatically.
-
-**Change resource**: `azd provision` (re-runs discovery + updates RBAC + regenerates `.env` files) or `azd env set AI_FOUNDRY_RESOURCE_GROUP <rg>` then `azd provision`.
-
-**Implementation**: `deployment/hooks/preprovision.ps1` (discovery), `infra/main.bicep` (RBAC via `core/security/role-assignment.bicep`).

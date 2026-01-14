@@ -88,3 +88,9 @@ AzureAd__TenantId=...
 ```
 
 **Regenerate**: Run `azd up` to recreate Entra app and `.env` files.
+
+## Related Skills
+
+- **writing-csharp-code** - Backend JWT validation and credential patterns
+- **writing-typescript-code** - Frontend MSAL integration and useAuth hook
+- **deploying-to-azure** - Entra app provisioning and RBAC configuration

@@ -1,54 +1,37 @@
-# AI Agent Web App - Copilot Instructions
-
 **Purpose**: AI-powered web application with Entra ID authentication and Azure AI Foundry Agent Service integration.
 
-## Architecture
+## Skills (On-Demand Context)
 
-**Single Container**: ASP.NET Core serves REST API (`/api/*`) + React SPA (same origin).
+Load a skill when working in that domain. Each has detailed patterns and examples.
 
-**Auth Flow**: Browser → MSAL.js (PKCE) → JWT → Backend → Azure AI Foundry (ManagedIdentity)
+| Skill | When to Load |
+|-------|--------------|
+| `writing-csharp-code` | Backend code, API endpoints, SDK usage |
+| `writing-typescript-code` | Frontend components, React hooks, MSAL |
+| `implementing-chat-streaming` | SSE endpoints, streaming state |
+| `troubleshooting-authentication` | 401 errors, token/JWT issues |
+| `deploying-to-azure` | azd commands, deployment failures |
+| `researching-azure-ai-sdk` | SDK patterns, multi-repo research |
+| `testing-with-playwright` | Browser testing, accessibility |
+| `writing-bicep-templates` | Infrastructure changes |
 
-**Config**: Local uses `.env` files (gitignored); Production uses environment variables.
+## Subagent Delegation
 
-**Subagent Strategy**: Skills include delegation patterns for context-heavy operations (screenshots, multi-repo research, log analysis). See skill docs for specific patterns.
+**Delegate to subagent** when operations would consume excessive context:
 
-## Key Files
+| Delegate | Keep Inline |
+|----------|-------------|
+| Multi-file research (5+ files) | Single file reads |
+| Screenshot/accessibility analysis | Console log checks |
+| Multi-repo code search | Local grep |
+| Full deployment log analysis | Quick status checks |
 
-| File | Purpose |
-|------|---------|
-| `backend/WebApp.Api/Program.cs` | Middleware + JWT + API endpoints |
-| `backend/WebApp.Api/Services/AzureAIAgentService.cs` | Azure AI Foundry Agent SDK integration |
-| `frontend/src/config/authConfig.ts` | MSAL configuration |
-| `frontend/src/services/chatService.ts` | SSE streaming + state dispatch |
-| `frontend/src/reducers/appReducer.ts` | Central state management |
-| `deployment/hooks/preprovision.ps1` | Entra app + AI Foundry discovery |
-| `infra/main-app.bicep` | Container App configuration |
+**Pattern**:
+```
+runSubagent(
+  prompt: "RESEARCH task - [specific goal]. Return: [exact output needed, max lines].",
+  description: "[3-5 word summary]"
+)
+```
 
-## Essential Rules
-
-### ✅ Always Do
-- Use `.RequireAuthorization("RequireChatScope")` on all API endpoints
-- Accept and propagate `CancellationToken` in async methods
-- Use `ErrorResponseFactory.CreateFromException()` for error responses
-- Try `acquireTokenSilent()` first, fallback to `acquireTokenPopup()`
-- Access `import.meta.env.*` at module level only
-
-### ❌ Never Do
-- Commit `.env*` files
-- Use `.Result` or `.Wait()` on async methods
-- Expose internal error details in production
-- Reorder middleware pipeline
-- Access `import.meta.env.*` inside functions
-
-## Skills Available
-
-For specialized guidance, these skills are available on-demand:
-
-- **deploying-to-azure** - Deployment commands, phases, troubleshooting
-- **researching-azure-ai-sdk** - SDK research patterns and resources
-- **testing-with-playwright** - Browser testing workflow
-- **writing-csharp-code** - C#/ASP.NET Core coding standards
-- **writing-typescript-code** - TypeScript/React patterns
-- **writing-bicep-templates** - Bicep infrastructure patterns
-- **implementing-chat-streaming** - SSE streaming patterns
-- **troubleshooting-authentication** - MSAL/JWT debugging
+**Key**: Tell subagent exactly what to return. It sends one message back—make it count.

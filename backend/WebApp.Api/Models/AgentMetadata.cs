@@ -13,4 +13,11 @@ public record AgentMetadataResponse
     public required string Model { get; init; }
     public string? Instructions { get; init; }
     public Dictionary<string, string>? Metadata { get; init; }
+    
+    /// <summary>
+    /// Starter prompts to display as suggestions in the chat interface.
+    /// Populated from agent metadata key "starterPrompts" (newline-separated text).
+    /// Configure in Azure AI Foundry portal under agent Configuration > Starter prompts.
+    /// </summary>
+    public List<string>? StarterPrompts { get; init; }
 }

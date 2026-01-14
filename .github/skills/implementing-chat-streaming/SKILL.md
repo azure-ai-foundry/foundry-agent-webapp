@@ -13,7 +13,7 @@ description: >
 ```csharp
 app.MapPost("/api/chat/stream", async (
     ChatRequest request,
-    AzureAIAgentService agentService,
+    AgentFrameworkService agentService,
     HttpContext httpContext,
     CancellationToken cancellationToken) =>
 {
@@ -120,7 +120,7 @@ Key patterns:
 ```csharp
 app.MapPost("/api/chat/stream", async (
     ChatRequest request,
-    AzureAIAgentService agentService,
+    AgentFrameworkService agentService,
     HttpContext httpContext,
     IHostEnvironment env,
     CancellationToken cancellationToken) =>
@@ -152,7 +152,7 @@ app.MapPost("/api/chat/stream", async (
 
 ## Project-Specific: Service Implementation
 
-**See**: `backend/WebApp.Api/Services/AzureAIAgentService.cs`
+**See**: `backend/WebApp.Api/Services/AgentFrameworkService.cs`
 
 **Key patterns in `StreamMessageAsync`**:
 - Disposal guard before processing
@@ -161,6 +161,7 @@ app.MapPost("/api/chat/stream", async (
 - `StreamingResponseOutputTextDeltaUpdate` for text content
 - `StreamingResponseOutputItemDoneUpdate` for annotations
 - Collects file search quotes via `FileSearchCallResponseItem` for citation context
+- Usage captured from `StreamingResponseCompletedUpdate`
 
 ## Project-Specific: Frontend State Flow
 
@@ -197,3 +198,9 @@ Each state change prints (dev only):
 Action: { … }
 Changes: { field: before → after }
 ```
+
+## Related Skills
+
+- **writing-csharp-code** - Backend coding standards and AgentFrameworkService patterns
+- **writing-typescript-code** - Frontend React patterns and ChatService implementation
+- **troubleshooting-authentication** - Token acquisition for authenticated streaming

@@ -59,15 +59,22 @@ runSubagent(
 
 ## SDK Architecture Overview
 
-The Azure AI Foundry SDK follows a layered architecture:
+The Azure AI Foundry SDK has **two API surfaces** for agents:
+
+| API | Endpoint | ID Format | SDK Access |
+|-----|----------|-----------|------------|
+| **v2 Agents API** | `/agents/` | Human-readable (e.g., `dadjokes`) | `AIProjectClient.Agents` |
+| **OpenAI Assistants API** | `/assistants/` | OpenAI format (e.g., `asst_xxx`) | `PersistentAgentsClient` |
+
+**This project uses v2 Agents API** for human-readable agent IDs.
 
 ```
 Azure.AI.Projects (Main Entry Point)
 ├── AIProjectClient
-│   ├── .GetPersistentAgentsClient() → PersistentAgentsClient (Threads/Runs API)
+│   ├── .Agents.GetAgentAsync() → AgentRecord (v2 Agents API)
+│   ├── .GetPersistentAgentsClient() → PersistentAgentsClient (Assistants API)
 │   └── .OpenAI.GetProjectResponsesClientForAgent() → ProjectResponsesClient (Responses API)
 └── Sub-namespaces:
-    ├── Azure.AI.Agents.Persistent (agent types, threads, runs)
     ├── Azure.AI.Projects.OpenAI (Responses API, conversations)
     └── OpenAI.Responses (streaming types)
 ```
@@ -182,24 +189,28 @@ Use GitHub search to find usage examples:
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `Azure.AI.Projects` | 1.2.0-beta.5 | Main entry point, `AIProjectClient`, Responses API |
-| `Azure.AI.Agents.Persistent` | Sub-namespace | Agent types, threads, runs (via `GetPersistentAgentsClient()`) |
-| `Azure.AI.Projects.OpenAI` | Sub-namespace | Responses API, conversations |
-| `Azure.Identity` | 1.17.1+ | Authentication (`AzureDeveloperCliCredential`, `ManagedIdentityCredential`) |
-| `Microsoft.Agents.AI.AzureAI` | 1.0.0-preview | Higher-level agent abstraction (optional) |
+| `Azure.AI.Projects` | 1.2.0-beta.5 | Main entry point, `AIProjectClient`, v2 Agents API, Responses API |
+| `Azure.Identity` | 1.17.1 | Authentication (`AzureDeveloperCliCredential`, `ManagedIdentityCredential`) |
+| `Microsoft.Identity.Web` | 4.3.0 | JWT Bearer authentication for API |
 
-**Note**: This project uses the beta version (`1.2.0-beta.5`) for Responses API access. The stable version (1.1.0) does not include `ProjectResponsesClient`.
+**Note**: This project uses `Azure.AI.Projects` beta for v2 Agents API access (`AIProjectClient.Agents`). The stable version does not include the v2 Agents API.
+
+**Sub-namespaces available** (not separate packages):
+- `Azure.AI.Projects.OpenAI` - Responses API, conversations
+- `OpenAI.Responses` - Streaming types
+
+**Removed Package**: `Microsoft.Agents.AI.AzureAI` was evaluated but removed because it only supports OpenAI Assistants API, not v2 Agents API.
 
 **Key Resources**:
 - NuGet (Azure.AI.Projects): https://www.nuget.org/packages/Azure.AI.Projects
 - SDK Source: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Projects
-- Agents Samples: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Agents.Persistent/samples
+- v2 Migration Guide: https://learn.microsoft.com/en-us/azure/ai-foundry/agents/how-to/migrate
 - API Reference: https://learn.microsoft.com/en-us/dotnet/api/azure.ai.projects
 - Product Docs: https://learn.microsoft.com/azure/ai-studio/
 
 ## Annotation Types in Responses
 
-The SDK provides several annotation types for citations:
+The SDK provides several annotation types for citations (from `OpenAI.Responses` namespace):
 
 | Type | Class | Use Case | Key Properties |
 |------|-------|----------|----------------|
@@ -208,7 +219,7 @@ The SDK provides several annotation types for citations:
 | File Path | `FilePathMessageAnnotation` | Code interpreter output | `FileId`, `Index` |
 | Container Citation | `ContainerFileCitationMessageAnnotation` | Container file citations | `FileId`, `Filename`, `StartIndex`, `EndIndex` |
 
-**Note**: `FileCitationMessageAnnotation` uses `Index` (not `StartIndex`/`EndIndex`) per the SDK. See `ExtractAnnotations()` in `AzureAIAgentService.cs` for mapping to `AnnotationInfo`.
+**Note**: `FileCitationMessageAnnotation` uses `Index` (not `StartIndex`/`EndIndex`) per the SDK. See `ExtractAnnotations()` in `AgentFrameworkService.cs` for mapping to `AnnotationInfo`.
 
 ## Streaming Response Types (from OpenAI.Responses namespace)
 
@@ -230,16 +241,15 @@ await foreach (var update in responsesClient.CreateResponseStreamingAsync(...))
 }
 ```
 
-## Microsoft Agent Framework (Alternative)
+## Microsoft Agent Framework (Not Used)
 
 **Package**: `Microsoft.Agents.AI.AzureAI` v1.0.0-preview
 
-Higher-level abstraction over Azure AI Foundry Agent Service.
+**Status**: This project previously evaluated the Agent Framework but does not use it because `PersistentAgentsClient.GetAIAgentAsync()` only works with OpenAI Assistants API, not the v2 Agents API that Azure AI Foundry uses for human-readable agent IDs.
 
-**When to use**:
-- Need unified agent abstraction across AI services
-- Building multi-agent orchestration
-- Prefer `AIAgent` abstractions over direct SDK
+**When to reconsider**:
+- When Microsoft adds native support for v2 Agents API in `PersistentAgentsClient`
+- Or a new `ProjectAgentsClient` that wraps `AIProjectClient.Agents`
 
 **Resources**:
 - Documentation: https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent

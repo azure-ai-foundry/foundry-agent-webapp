@@ -37,39 +37,87 @@
   max-width: 600px;
 }
 
-.promptStarters {
+/* Starter prompts list - card-style layout with responsive wrapping */
+.promptList {
+  list-style: none;
+  padding: 0 1rem;
+  margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.75rem;
+  justify-content: center;
+  max-width: 900px;
+}
+
+/* Card-style prompt buttons */
+.promptCard {
+  background: var(--colorNeutralBackground2);
+  border: 2px solid transparent;
+  border-radius: var(--borderRadiusMedium, 0.5rem);
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  min-height: 4.5rem;
+  max-width: 18rem;
+  width: 100%;
+  display: flex;
   align-items: center;
   justify-content: center;
-
-  width: 100%;
+  text-align: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
 }
 
-.promptStarters > * {
-  flex-shrink: 1;
-  min-width: 0;
+.promptCard:hover {
+  background: var(--colorNeutralBackground2Hover);
+  border-color: var(--colorBrandStroke1);
 }
 
-/* Style starter prompt buttons */
-.promptStarters button {
-  min-width: 0;
-  border: 1px solid var(--colorNeutralStroke2);
-  border-radius: 12px;
-  white-space: normal;
-  background-color: transparent;
+.promptCard:focus-visible {
+  outline: 2px solid var(--colorBrandStroke1);
+  outline-offset: 2px;
 }
 
-.promptStarters button:hover {
-  background-color: var(--colorNeutralBackground2);
+.promptText {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  word-break: break-word;
+  color: var(--colorNeutralForeground1);
 }
 
-/* Responsive behavior for smaller screens */
-@media (width <= 768px) {
-  .promptStarters {
+/* Responsive: Stack vertically and hide 3rd+ on mobile */
+@media (max-width: 600px) {
+  .promptList {
     flex-direction: column;
-    gap: 8px;
-    height: auto;
+    align-items: stretch;
+    padding: 0 0.5rem;
+  }
+
+  .promptCard {
+    max-width: 100%;
+    min-height: 3.5rem;
+  }
+
+  /* Hide 3rd and beyond on small screens */
+  .promptList li:nth-child(n+4) {
+    display: none;
+  }
+}
+
+/* Tablet: show all, horizontal wrap */
+@media (min-width: 601px) and (max-width: 900px) {
+  .promptCard {
+    max-width: 15rem;
+  }
+}
+
+/* Desktop: larger cards */
+@media (min-width: 901px) {
+  .promptCard {
+    min-height: 5rem;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .promptText {
+    font-size: 1rem;
   }
 }

@@ -103,3 +103,8 @@
   padding: 0 1rem;
   box-sizing: border-box;
 }
+
+/* Built with badge - centered under input */
+.builtWithBadge {
+  padding-bottom: 0.5rem;
+}

@@ -24,14 +24,7 @@ export interface IFileAttachment {
   dataUri?: string; // Base64 data URI for inline image preview
 }
 
-/**
- * Represents a citation/annotation from AI agent responses.
- * Supports all Azure AI Agent SDK annotation types:
- * - uri_citation: Bing, Azure AI Search, SharePoint
- * - file_citation: File search from vector stores
- * - file_path: Code interpreter generated files
- * - container_file_citation: Container file citations
- */
+/** Citation/annotation from AI agent responses (Azure AI Agent SDK annotation types). */
 export interface IAnnotation {
   /** Type: "uri_citation", "file_citation", "file_path", or "container_file_citation" */
   type: 'uri_citation' | 'file_citation' | 'file_path' | 'container_file_citation';
@@ -61,4 +54,10 @@ export interface IAgentMetadata {
   model: string;
   instructions?: string | null;
   metadata?: Record<string, string> | null;
+  /**
+   * Starter prompts from agent metadata ("starterPrompts" key, camelCase).
+   * Stored as newline-separated text in the metadata dictionary.
+   * If not set in Azure AI Foundry, defaults will be used in the UI.
+   */
+  starterPrompts?: string[] | null;
 }

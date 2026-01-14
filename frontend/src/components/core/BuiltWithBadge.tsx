@@ -1,6 +1,5 @@
 import React from 'react';
 import { Caption1Strong } from '@fluentui/react-components';
-import { ArrowRight16Filled } from '@fluentui/react-icons';
 import { AIFoundryLogo } from '../icons/AIFoundryLogo';
 import styles from './BuiltWithBadge.module.css';
 
@@ -25,11 +24,11 @@ export const BuiltWithBadge: React.FC<BuiltWithBadgeProps> = ({ className }) => 
       <span className={styles.logo}>
         <AIFoundryLogo />
       </span>
-      <Caption1Strong className={styles.description}>
+      <Caption1Strong className={styles.text}>
         Build & deploy AI agents with
       </Caption1Strong>
       <Caption1Strong className={styles.brand}>
-        Azure AI Foundry <ArrowRight16Filled aria-hidden={true} />
+        Azure AI Foundry
       </Caption1Strong>
     </button>
   );

@@ -121,10 +121,9 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
-// Register Azure AI Agent Service as scoped
-// Scoped is preferred for services making external API calls to ensure proper disposal
-// and avoid potential issues with long-lived connections
-builder.Services.AddScoped<WebApp.Api.Services.AzureAIAgentService>();
+// Register Azure AI Agent Service for Azure AI Foundry v2 Agents
+// Uses Azure.AI.Projects SDK which works with v2 Agents API (/agents/ endpoint with human-readable IDs).
+builder.Services.AddScoped<AgentFrameworkService>();
 
 var app = builder.Build();
 
@@ -173,7 +172,7 @@ app.MapGet("/api/health", (HttpContext context) =>
 // Streaming Chat endpoint: Streams agent response via SSE (conversationId → chunks → usage → done)
 app.MapPost("/api/chat/stream", async (
     ChatRequest request,
-    AzureAIAgentService agentService,
+    AgentFrameworkService agentService,
     HttpContext httpContext,
     IHostEnvironment environment,
     CancellationToken cancellationToken) =>
@@ -208,18 +207,14 @@ app.MapPost("/api/chat/stream", async (
         }
 
         var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
-        var usage = await agentService.GetLastRunUsageAsync(cancellationToken);
-
-        if (usage != null)
-        {
-            await WriteUsageEvent(httpContext.Response, new
-            {
-                duration,
-                promptTokens = usage.PromptTokens,
-                completionTokens = usage.CompletionTokens,
-                totalTokens = usage.TotalTokens
-            }, cancellationToken);
-        }
+        var usage = agentService.GetLastUsage();
+        await WriteUsageEvent(
+            httpContext.Response,
+            duration,
+            usage?.InputTokens ?? 0,
+            usage?.OutputTokens ?? 0,
+            usage?.TotalTokens ?? 0,
+            cancellationToken);
 
         await WriteDoneEvent(httpContext.Response, cancellationToken);
     }
@@ -288,15 +283,15 @@ static async Task WriteAnnotationsEvent(HttpResponse response, List<WebApp.Api.M
     await response.Body.FlushAsync(ct);
 }
 
-static async Task WriteUsageEvent(HttpResponse response, object usageData, CancellationToken ct)
+static async Task WriteUsageEvent(HttpResponse response, double duration, int promptTokens, int completionTokens, int totalTokens, CancellationToken ct)
 {
     var json = System.Text.Json.JsonSerializer.Serialize(new
     {
         type = "usage",
-        duration = ((dynamic)usageData).duration,
-        promptTokens = ((dynamic)usageData).promptTokens,
-        completionTokens = ((dynamic)usageData).completionTokens,
-        totalTokens = ((dynamic)usageData).totalTokens
+        duration,
+        promptTokens,
+        completionTokens,
+        totalTokens
     });
     await response.WriteAsync($"data: {json}\n\n", ct);
     await response.Body.FlushAsync(ct);
@@ -318,7 +313,7 @@ static async Task WriteErrorEvent(HttpResponse response, string message, Cancell
 // Get agent metadata (name, description, model, metadata)
 // Used by frontend to display agent information in the UI
 app.MapGet("/api/agent", async (
-    AzureAIAgentService agentService,
+    AgentFrameworkService agentService,
     IHostEnvironment environment,
     CancellationToken cancellationToken) =>
 {
@@ -347,7 +342,7 @@ app.MapGet("/api/agent", async (
 
 // Get agent info (for debugging)
 app.MapGet("/api/agent/info", async (
-    AzureAIAgentService agentService,
+    AgentFrameworkService agentService,
     IHostEnvironment environment,
     CancellationToken cancellationToken) =>
 {

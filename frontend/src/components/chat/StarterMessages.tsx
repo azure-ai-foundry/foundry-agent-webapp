@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Body1, Subtitle1, Button } from '@fluentui/react-components';
+import { Body1, Subtitle1 } from '@fluentui/react-components';
 import { AgentIcon } from '../core/AgentIcon';
 import styles from './StarterMessages.module.css';
 
@@ -7,12 +7,18 @@ interface IStarterMessageProps {
   agentName?: string;
   agentDescription?: string;
   agentLogo?: string;
+  /**
+   * Starter prompts from agent metadata.
+   * If not provided, falls back to default prompts.
+   * 
+   * Configure in Azure AI Foundry portal under agent Configuration > Starter prompts.
+   * Prompts are stored as newline-separated text in the "starterPrompts" metadata key.
+   */
+  starterPrompts?: string[];
   onPromptClick?: (prompt: string) => void;
 }
 
-// NOTE: Starter prompts are hardcoded here (not fetched from Azure AI Foundry)
-// Customize these based on your agent's capabilities
-// The Azure sample also uses hardcoded prompts in the frontend
+// Default starter prompts when none are configured in Azure AI Foundry
 const defaultStarterPrompts = [
   "How can you help me?",
   "What are your capabilities?",
@@ -23,8 +29,14 @@ export const StarterMessages = ({
   agentName,
   agentDescription,
   agentLogo,
+  starterPrompts,
   onPromptClick,
 }: IStarterMessageProps): ReactNode => {
+  // Use agent-provided prompts or fall back to defaults
+  const prompts = starterPrompts && starterPrompts.length > 0 
+    ? starterPrompts 
+    : defaultStarterPrompts;
+
   return (
     <div className={styles.zeroprompt}>
       <div className={styles.content}>
@@ -42,17 +54,20 @@ export const StarterMessages = ({
       </div>
 
       {onPromptClick && (
-        <div className={styles.promptStarters}>
-          {defaultStarterPrompts.map((prompt, index) => (
-            <Button
-              key={`prompt-${index}`}
-              appearance="subtle"
-              onClick={() => onPromptClick(prompt)}
-            >
-              <Body1>{prompt}</Body1>
-            </Button>
+        <ul className={styles.promptList}>
+          {prompts.map((prompt, index) => (
+            <li key={`prompt-${index}`}>
+              <button
+                className={styles.promptCard}
+                onClick={() => onPromptClick(prompt)}
+                type="button"
+                title={prompt}
+              >
+                <span className={styles.promptText}>{prompt}</span>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

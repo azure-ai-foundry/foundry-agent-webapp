@@ -1,0 +1,48 @@
+/* Inline citation marker - superscript badge */
+.citationMarker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7em;
+  font-weight: 600;
+  min-width: 1.2em;
+  height: 1.2em;
+  padding: 0 0.3em;
+  margin: 0 0.1em;
+  border-radius: 4px;
+  background-color: var(--colorBrandBackground2);
+  color: var(--colorBrandForeground1);
+  cursor: pointer;
+  vertical-align: super;
+  line-height: 1;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  user-select: none;
+}
+
+.citationMarker:hover {
+  background-color: var(--colorBrandBackground2Hover);
+  transform: scale(1.1);
+}
+
+.citationMarker:focus-visible {
+  outline: 2px solid var(--colorBrandStroke1);
+  outline-offset: 1px;
+}
+
+.citationMarker:active {
+  transform: scale(0.95);
+}
+
+/* Highlight animation when scrolled to */
+.highlight {
+  animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 4px var(--colorBrandBackground2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
