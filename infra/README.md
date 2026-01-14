@@ -10,7 +10,7 @@ Infrastructure as Code (IaC) using Azure Bicep, deployed via Azure Developer CLI
 - **Azure Container Apps Environment** - Serverless container runtime
 - **Azure Container App** - Single container (frontend + backend)
 - **Log Analytics Workspace** - Centralized logging
-- **RBAC Assignments** - Managed identity → AI Foundry access
+- **RBAC Assignments** - Managed identity → AI Foundry access (via Azure CLI, not Bicep)
 
 ## Architecture
 
@@ -23,8 +23,10 @@ Subscription (deployment scope)
 │       ├── System-assigned identity
 │       ├── Scale: 0-3 replicas
 │       └── Ingress: HTTPS external
-├── Log Analytics Workspace
-└── RBAC: Container App → Cognitive Services User
+└── Log Analytics Workspace
+
+RBAC Assignment (via Azure CLI in postprovision.ps1):
+└── Container App Identity → Cognitive Services User on AI Foundry resource
 ```
 
 ## Files
@@ -83,8 +85,6 @@ az deployment sub create \
 | `entraTenantId` | `tenant().tenantId` | Entra tenant ID (auto-detected or from azd) |
 | `aiAgentEndpoint` | (from azd) | AI Agent endpoint URL |
 | `aiAgentId` | (from azd) | Agent name |
-| `aiFoundryResourceGroup` | (from azd) | AI Foundry resource group (for RBAC scope) |
-| `aiFoundryResourceName` | (from azd) | AI Foundry resource name (for RBAC scope) |
 
 ## Outputs
 
@@ -93,8 +93,8 @@ az deployment sub create \
 | `AZURE_CONTAINER_APP_NAME` | Container App name (for deployment scripts) |
 | `AZURE_CONTAINER_REGISTRY_NAME` | ACR name (for image push) |
 | `AZURE_RESOURCE_GROUP_NAME` | Resource group name |
-| `CONTAINER_APP_URL` | Application FQDN |
-| `CONTAINER_APP_IDENTITY_PRINCIPAL_ID` | Managed identity principal ID (for RBAC) |
+| `WEB_ENDPOINT` | Application FQDN with https:// |
+| `WEB_IDENTITY_PRINCIPAL_ID` | Managed identity principal ID (for RBAC via CLI) |
 
 ## Resource Configuration
 
@@ -138,7 +138,7 @@ Estimated monthly cost: **$10-15** (varies by usage).
 | Issue | Solution |
 |-------|----------|
 | Deployment fails | Check `az deployment sub show -n <deployment-name>` |
-| RBAC not working | Verify `CONTAINER_APP_IDENTITY_PRINCIPAL_ID` has role assignment |
+| RBAC not working | Verify `WEB_IDENTITY_PRINCIPAL_ID` has role on AI Foundry resource |
 | Scale-to-zero not working | Check HTTP/TCP health probes (must succeed) |
 | Name conflicts | Change `environmentName` parameter |
 

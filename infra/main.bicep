@@ -16,12 +16,6 @@ param aiAgentEndpoint string = ''
 @description('AI Agent ID (configured via azd env set AI_AGENT_ID)')
 param aiAgentId string = ''
 
-@description('AI Foundry resource group name (auto-discovered by preprovision hook)')
-param aiFoundryResourceGroup string = ''
-
-@description('AI Foundry resource name (auto-discovered by preprovision hook)')
-param aiFoundryResourceName string = ''
-
 @description('Entra ID Client ID (set by azd hook)')
 param entraSpaClientId string = ''
 
@@ -78,17 +72,8 @@ module app 'main-app.bicep' = {
   }
 }
 
-// Assign Cognitive Services User role to web managed identity on AI Agent resource
-module roleAssignment 'core/security/role-assignment.bicep' = {
-  name: 'ai-agent-role-assignment'
-  scope: resourceGroup(aiFoundryResourceGroup)
-  params: {
-    principalId: app.outputs.webIdentityPrincipalId
-    roleDefinitionId: 'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
-    principalType: 'ServicePrincipal'
-    aiFoundryResourceName: aiFoundryResourceName
-  }
-}
+// Note: Role assignment to AI Foundry resource is done via Azure CLI in postprovision.ps1
+// This avoids azd tracking the external resource group and deleting it on 'azd down'
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = infrastructure.outputs.containerRegistryLoginServer
 output AZURE_CONTAINER_REGISTRY_NAME string = infrastructure.outputs.containerRegistryName
@@ -96,3 +81,4 @@ output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = infrastructure.outputs.conta
 output AZURE_RESOURCE_GROUP_NAME string = rg.name
 output AZURE_CONTAINER_APP_NAME string = app.outputs.webAppName
 output WEB_ENDPOINT string = app.outputs.webEndpoint
+output WEB_IDENTITY_PRINCIPAL_ID string = app.outputs.webIdentityPrincipalId

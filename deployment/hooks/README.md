@@ -6,17 +6,19 @@
 
 | Phase | Command | Hooks Executed | Duration |
 |-------|---------|----------------|----------|
-| **Deploy** | `azd up` | preprovision → provision → postprovision | 10-12 min |
+| **Deploy** | `azd up` | preprovision → provision → postprovision → predeploy | 10-12 min |
+| **Code Only** | `azd deploy` | predeploy | 3-5 min |
 | **Teardown** | `azd down` | (resources deleted) → postdown | 2-3 min |
-| **Reprovision** | `azd provision` | preprovision → provision | 2-3 min |
+| **Reprovision** | `azd provision` | preprovision → provision → postprovision | 2-3 min |
 
 ## Hook Details
 
 | Hook | Purpose | Key Actions | Outputs |
 |------|---------|-------------|---------|
 | **preprovision.ps1** | Create Entra app + discover AI Foundry + generate config | • Discovers AI Foundry resources<br>• Creates Entra SPA app<br>• Generates `.env` files | `.env` and `.env.local` files |
-| **postprovision.ps1** | Build & deploy container | • Updates redirect URIs<br>• Builds Docker image<br>• Deploys to Container App | Updated Container App |
-| **postdown.ps1** | Cleanup (optional) | • Optionally removes Docker images<br>• Default: preserves for fast redeploy | Clean slate |
+| **postprovision.ps1** | Configure Entra + RBAC | • Updates redirect URIs with production URL<br>• Assigns Cognitive Services User role to AI Foundry | Configured Entra app + RBAC |
+| **predeploy.ps1** | Build container image | • Detects Docker availability<br>• Local Docker build + push OR ACR cloud build<br>• Updates Container App if it exists | Container image in ACR |
+| **postdown.ps1** | Cleanup (optional) | • Removes RBAC assignment<br>• Deletes Entra app<br>• Optionally removes Docker images | Clean slate |
 
 ## Module Scripts
 
@@ -69,11 +71,12 @@ azd up
 
 | Issue | Fix |
 |-------|-----|
-| App registration fails with policy error | Set `$env:ENTRA_SERVICE_MANAGEMENT_REFERENCE = 'guid'` (see note below) |
+| App registration fails with policy error | Run `azd env set ENTRA_SERVICE_MANAGEMENT_REFERENCE 'guid'` (see note below) |
 | Preprovision fails | Verify Azure CLI auth: `az account show` |
-| Postprovision Docker build fails | Check Docker running: `docker version` |
+| Predeploy Docker build fails | Check Docker running: `docker version` (falls back to ACR cloud build) |
 | AI Foundry not found | Create resource at https://ai.azure.com |
 | Multiple AI Foundry resources | Hook will prompt for selection |
+| RBAC assignment fails | Verify you have User Access Administrator role on AI Foundry resource |
 
 ### App Registration Policies
 
@@ -81,10 +84,11 @@ Some organizations require [`serviceManagementReference`](https://learn.microsof
 
 **Quick fix**:
 ```powershell
-$env:ENTRA_SERVICE_MANAGEMENT_REFERENCE = 'your-guid-here'; azd up
+azd env set ENTRA_SERVICE_MANAGEMENT_REFERENCE 'your-guid-here'
+azd up
 ```
 
-**Persistent fix**:
+**Persistent fix** (environment variable):
 ```powershell
 [System.Environment]::SetEnvironmentVariable('ENTRA_SERVICE_MANAGEMENT_REFERENCE', 'your-guid-here', 'User')
 # Restart terminal

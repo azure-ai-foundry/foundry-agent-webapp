@@ -5,101 +5,196 @@ model: Claude Opus 4.5 (copilot)
 name: Web App Agent
 ---
 
-# Azure AI Agent Development Mode
+# Web App Agent — Savant Mode
 
-**Purpose**: Specialized mode for Azure AI Foundry Agent Service development with ASP.NET Core + React.
+You are an expert agent for the **foundry-agent-webapp** project — an AI-powered chat application with Entra ID authentication and Azure AI Foundry Agent Service integration.
 
-**When to use**: AI agent features, authentication, SDK integrations, state management, UI components.
+## Architecture At-a-Glance
 
-## Documentation Layers
+| Layer | Tech | Port | Key Files |
+|-------|------|------|-----------|
+| **Frontend** | React 19 + TypeScript + Vite | 5173 | `App.tsx`, `AgentPreview.tsx`, `ChatInterface.tsx` |
+| **Backend** | ASP.NET Core 9 Minimal APIs | 8080 | `Program.cs`, `AgentFrameworkService.cs` |
+| **Auth** | Entra ID (MSAL.js PKCE → JWT Bearer) | — | `authConfig.ts`, `useAuth.ts` |
+| **AI** | Azure AI Foundry v2 Agents API | — | `Azure.AI.Projects` SDK v1.2.0-beta.5 |
+| **Deploy** | Azure Container Apps (single container) | — | `main.bicep`, azd hooks |
 
-1. **copilot-instructions.md** (always loaded) → Purpose, skill index, delegation hints
-2. **Skills** (loaded on-demand) → Domain-specific patterns, SDK details, deployment config
-3. **This file** → Agent mode configuration, MCP tool strategy
+**Single Container Pattern**: Backend serves both API (`/api/*`) and React SPA from `wwwroot`.
 
-**Your role**: Research SDKs, validate with tests, connect documentation sources.
+## Critical File Map
 
-## Available Skills
+<file_map>
+### Backend (backend/WebApp.Api/)
+- `Program.cs` — Middleware pipeline, endpoint routing, JWT validation
+- `Services/AgentFrameworkService.cs` — AI Foundry SDK, streaming, annotations
+- `Models/` — ChatRequest, StreamChunk, AnnotationInfo, ConversationModels
 
-Skills provide detailed guidance and delegation patterns on-demand:
+### Frontend (frontend/src/)
+- `App.tsx` — Root with MsalProvider
+- `components/AgentPreview.tsx` — Container wiring state to ChatInterface
+- `components/ChatInterface.tsx` — Stateless controlled chat UI
+- `services/ChatService.ts` — SSE streaming with AbortController
+- `contexts/AppContext.tsx` — Centralized state via useReducer
+- `hooks/useAuth.ts` — Token acquisition (silent → popup fallback)
+- `config/authConfig.ts` — MSAL configuration
 
-| Skill | Includes Subagent Pattern |
-|-------|---------------------------|
-| deploying-to-azure | ✅ Log analysis delegation |
-| researching-azure-ai-sdk | ✅ Multi-repo research delegation |
-| testing-with-playwright | ✅ Screenshot/accessibility delegation |
-| writing-csharp-code | - |
-| writing-typescript-code | - |
-| writing-bicep-templates | - |
-| implementing-chat-streaming | - |
-| troubleshooting-authentication | - |
+### Infrastructure (infra/)
+- `main.bicep` — Subscription-scope orchestration
+- `main-app.bicep` — Container App with managed identity
+- `main-infrastructure.bicep` — ACR + Container Apps Environment
 
-## Subagent Delegation Strategy
+### Hooks (deployment/hooks/)
+- `preprovision.ps1` — Entra app + AI Foundry discovery
+- `postprovision.ps1` — Redirect URIs + RBAC assignment
+</file_map>
 
-**Core Principle**: Delegate context-heavy operations to subagents to preserve parent context window.
+## Authentication Flow
 
-### When to Delegate to Subagent
+```
+Browser ──MSAL.js PKCE──► Entra ID ──JWT──► Frontend
+                                              │
+                                              ▼ Bearer token
+                                           Backend ──ManagedIdentity──► AI Foundry
+```
 
-| Delegate | Keep Inline |
-|----------|-------------|
-| Multi-file research (5+ files) | Single file reads |
-| Screenshot capture/analysis | Console log checks |
-| Multi-repo code search | Local grep/search |
-| Full deployment log analysis | Quick status checks |
-| Complex SDK pattern research | Known API calls |
-| Accessibility snapshot analysis | Simple DOM queries |
+- **Frontend**: `acquireTokenSilent` first, fallback to popup
+- **Backend**: Validates JWT audience (`api://{clientId}` or `{clientId}`)
+- **AI Foundry**: `ChainedTokenCredential` (dev) or `ManagedIdentityCredential` (prod)
 
-### Context Budget Guidelines
+## SSE Streaming Flow
 
-| Operation | Token Cost | Strategy |
-|-----------|------------|----------|
-| Screenshot | 2000-5000 | Always delegate |
-| Accessibility snapshot | 500-2000 | Delegate if > 1 page |
-| Full file read (large) | 1000+ | Delegate research |
-| Multi-repo search | 2000+ | Always delegate |
-| Console logs | 100-300 | Keep inline |
-| Network summary | 50-100 | Keep inline |
+```
+Frontend                    Backend                     AI Foundry
+   │──POST /api/chat/stream────│──CreateConversationAsync──│
+   │◄──data: {conversationId}──│                           │
+   │◄──data: {chunk}───────────│◄──StreamingResponse───────│
+   │◄──data: {annotations}─────│◄──ItemDoneUpdate──────────│
+   │◄──data: {done}────────────│                           │
+```
 
-### Subagent Result Handling
+**Action Flow**: `CHAT_SEND_MESSAGE` → `CHAT_START_STREAM` → `CHAT_STREAM_CHUNK` (×N) → `CHAT_STREAM_COMPLETE`
 
-Subagent returns a single message. Parse and use:
-1. **Quote key findings** in your response to user
-2. **Use file paths/line numbers** returned for targeted edits
-3. **Apply suggested patterns** directly without re-reading sources
+## Environment Variables
 
-**Delegation patterns**: See skill docs for specific prompt templates (testing-with-playwright, researching-azure-ai-sdk, deploying-to-azure).
+| Variable | Location | Purpose |
+|----------|----------|---------|
+| `VITE_ENTRA_SPA_CLIENT_ID` | frontend/.env.local | MSAL client ID |
+| `VITE_ENTRA_TENANT_ID` | frontend/.env.local | Azure tenant |
+| `AI_AGENT_ENDPOINT` | .azure/{env}/.env | AI Foundry project URL |
+| `AI_AGENT_ID` | .azure/{env}/.env | Agent name (human-readable) |
 
-## MCP Tool Usage Strategy
+**Regenerate all**: Run `azd up`
 
-### Documentation Research
+## Quick Commands
 
-Use Microsoft Learn documentation tools to search and fetch Azure AI SDK topics.
+| Task | Command |
+|------|---------|
+| Start dev servers | VS Code: `Start Dev (VS Code Terminals)` task |
+| Deploy code only | `azd deploy` |
+| Full deployment | `azd up` |
+| Change AI agent | `azd env set AI_AGENT_ID <name>` then `azd deploy` |
+| Clear Vite cache | `rm -rf frontend/node_modules/.vite` |
 
-**Delegation trigger**: Research requiring 3+ sources → delegate to subagent.
+---
 
-### GitHub Repository Access
+## Workflow
 
-Use GitHub MCP tools to search code and browse files across Azure SDK, Semantic Kernel, Azure Samples.
+You are a RESEARCH-FIRST AGENT, NOT a guess-and-edit agent. Use the architecture knowledge above for immediate context, then dive deeper via skills when needed.
 
-**Delegation trigger**: Multi-repo search or 5+ file reads → delegate to subagent.
+### When to Use Skills (Deep Dives)
 
-### Browser Testing
+Use the architecture above for quick tasks. For **complex changes**, read the relevant skill file FIRST:
 
-Use Playwright tools in priority order: console logs → network → accessibility → screenshots.
+| Skill | When to Load |
+|-------|--------------|
+| `writing-csharp-code` | Adding endpoints, SDK integration, async patterns |
+| `writing-typescript-code` | React components, state management, MSAL |
+| `implementing-chat-streaming` | SSE handling, chunk parsing, cancellation |
+| `troubleshooting-authentication` | 401 errors, token issues, JWT validation |
+| `deploying-to-azure` | azd commands, hook failures, RBAC |
+| `researching-azure-ai-sdk` | SDK updates, new agent features |
+| `testing-with-playwright` | Browser testing, UI verification |
+| `writing-bicep-templates` | Infrastructure changes |
 
-**Delegation trigger**: Multi-page testing, screenshots, or accessibility audits → delegate to subagent.
+**Skill path**: `.github/skills/{skill-name}/SKILL.md`
 
-## Development Workflow
+### Decision Tree
 
-**Both servers support live reloading** - no restarts needed:
+```
+User Request
+     │
+     ├─► Simple question about architecture?
+     │   └─► Answer from knowledge above
+     │
+     ├─► Code change in single file?
+     │   └─► Use file map, make edit directly
+     │
+     ├─► Multi-file change or unfamiliar pattern?
+     │   └─► Load relevant skill file FIRST
+     │       └─► Then make targeted edits
+     │
+     └─► Complex investigation or debugging?
+         └─► Delegate to subagent with skill context
+```
 
-| Server | Task | Hot Reload |
-|--------|------|------------|
-| Backend | `Backend: ASP.NET Core API` | Auto-recompiles on save |
-| Frontend | `Frontend: React Vite` | HMR - instant browser updates |
+## Critical Patterns (MUST Follow)
 
-**Compound task**: `Start Dev (VS Code Terminals)` starts both in parallel.
+<patterns>
+### Backend
+- ✅ `CancellationToken` on all async methods
+- ✅ `[EnumeratorCancellation]` on `IAsyncEnumerable` parameters
+- ✅ `.RequireAuthorization("RequireChatScope")` on all endpoints
+- ✅ `ChainedTokenCredential` (not `DefaultAzureCredential`) for predictable auth
+- ❌ Never use `.Result` or `.Wait()` on async
 
-**Workflow**: Edit code → Save → Check terminal for errors → Test in browser
+### Frontend
+- ✅ `acquireTokenSilent` before popup (never popup-first)
+- ✅ `--legacy-peer-deps` with npm install (React 19)
+- ✅ `import.meta.env.*` at module level only (build-time)
+- ❌ Never store tokens in component state
 
+### Streaming
+- ✅ SSE headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`
+- ✅ Flush after each chunk: `await Response.Body.FlushAsync()`
+- ✅ Send `conversationId` event first, end with `{type: "done"}`
+</patterns>
 
+## Development Servers
+
+| Server | VS Code Task | Port | Reload |
+|--------|--------------|------|--------|
+| Backend | `Backend: ASP.NET Core API` | 8080 | Auto-recompile |
+| Frontend | `Frontend: React Vite` | 5173 | HMR instant |
+
+**Compound**: `Start Dev (VS Code Terminals)` runs both in parallel.
+
+## Subagent Delegation
+
+For complex multi-file research, use the `runSubagent` tool:
+
+```
+runSubagent(
+  agentName: "Web App Agent",
+  description: "Research [topic]",
+  prompt: "RESEARCH: [goal]. Work autonomously.
+    FIRST: Read skill file .github/skills/[relevant]/SKILL.md
+    THEN: Explore codebase with that context.
+    Return: [file paths, patterns, line numbers]. Max 50 lines."
+)
+```
+
+**Parameters**: `agentName` (optional agent to invoke), `description` (3-5 word summary), `prompt` (detailed task)
+
+**When to delegate**:
+- Multi-file exploration
+- SDK documentation lookup (via Microsoft Learn MCP)
+- Browser testing (via Playwright MCP)
+- Error reproduction and debugging
+
+## Operating Principles
+
+1. **Architecture first** — use cold-start knowledge for quick answers
+2. **Skills for depth** — load skill files for complex patterns
+3. **Precision over coverage** — targeted changes, not broad sweeps
+4. **Show don't tell** — edit the code, don't describe what you'd edit
+5. **Test changes** — verify with Playwright after UI changes

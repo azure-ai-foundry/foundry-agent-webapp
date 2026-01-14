@@ -175,7 +175,7 @@ azd env set AI_AGENT_ID <agent-name>
 ### Deploy
 ```powershell
 # Deploy code changes to Azure
-.\deployment\scripts\deploy.ps1  # 3-5 minutes
+azd deploy  # 3-5 minutes
 ```
 
 ## Architecture
@@ -196,13 +196,11 @@ azd env set AI_AGENT_ID <agent-name>
 | Command | Purpose | Duration |
 |---------|---------|----------|
 | `azd up` | Initial deployment (infra + code) | 10-12 min |
-| `.\deployment\scripts\deploy.ps1` | Deploy code changes only | 3-5 min |
+| `azd deploy` | Deploy code changes only | 3-5 min |
 | `.\deployment\scripts\start-local-dev.ps1` | Start local development | Instant |
 | `.\deployment\scripts\list-agents.ps1` | List agents in your project | Instant |
 | `azd provision` | Re-deploy infrastructure / update RBAC | 2-3 min |
 | `azd down --force --purge` | Delete all Azure resources | 2-3 min |
-
-> **Why not `azd deploy`?** This template uses an infra-only pattern. The `postprovision` hook handles initial builds, and `deploy.ps1` handles code updates to avoid redundant operations.
 
 ## Documentation
 

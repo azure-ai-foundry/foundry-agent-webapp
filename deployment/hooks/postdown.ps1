@@ -1,163 +1,66 @@
 #!/usr/bin/env pwsh
-<#
-.SYNOPSIS
-    Cleanup hook after azd down
+# Post-down: Cleanup Entra app, role assignments, and local config after azd down
 
-.DESCRIPTION
-    This hook runs after Azure resources are deleted by azd down.
-    
-    By default, Docker images are PRESERVED to speed up redeployment.
-    To clean Docker images, set environment variable:
-        $env:CLEAN_DOCKER_IMAGES = "true"
-        azd down --force --purge
+$ErrorActionPreference = "Continue"
 
-.EXAMPLE
-    # Normal teardown (preserves Docker images)
-    azd down --force --purge
-    
-.EXAMPLE
-    # Full cleanup (removes Docker images too)
-    $env:CLEAN_DOCKER_IMAGES = "true"
-    azd down --force --purge
-#>
-
-$ErrorActionPreference = "Stop"
-
-Write-Host "`n=====================================" -ForegroundColor Cyan
-Write-Host " Post-Down Cleanup" -ForegroundColor Cyan
-Write-Host "=====================================" -ForegroundColor Cyan
-
-# --- Get environment name ---
+Write-Host "Post-Down Cleanup" -ForegroundColor Cyan
 
 $envName = $env:AZURE_ENV_NAME
-if (-not $envName) {
-    Write-Host "[!] Warning: AZURE_ENV_NAME not set, skipping some cleanup steps" -ForegroundColor Yellow
-}
 
-# --- Delete Entra App Registration ---
+# Remove role assignment from AI Foundry resource (if it exists)
+$webIdentityPrincipalId = azd env get-value WEB_IDENTITY_PRINCIPAL_ID 2>$null
+$aiFoundryResourceGroup = azd env get-value AI_FOUNDRY_RESOURCE_GROUP 2>$null
+$aiFoundryResourceName = azd env get-value AI_FOUNDRY_RESOURCE_NAME 2>$null
+$subscriptionId = azd env get-value AZURE_SUBSCRIPTION_ID 2>$null
 
-if ($envName) {
-    Write-Host "`nCleaning up Entra app registration..." -ForegroundColor Cyan
+if ($webIdentityPrincipalId -and $aiFoundryResourceGroup -and $aiFoundryResourceName -and $subscriptionId) {
+    Write-Host "Removing role assignment from AI Foundry resource..." -ForegroundColor Yellow
     
-    try {
-        # Try to get the client ID from the environment
-        $clientId = azd env get-value ENTRA_SPA_CLIENT_ID 2>$null
-        
-        if ($clientId) {
-            Write-Host "  Found app registration: $clientId" -ForegroundColor Gray
-            az ad app delete --id $clientId 2>&1 | Out-Null
-            Write-Host "  [OK] Entra app registration deleted" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  No ENTRA_SPA_CLIENT_ID found in environment" -ForegroundColor Gray
-        }
-    }
-    catch {
-        Write-Host "  [!] Could not delete Entra app registration" -ForegroundColor Yellow
-        Write-Host "    $_" -ForegroundColor Gray
-    }
-}
-
-# --- Delete local configuration files ---
-
-Write-Host "`nCleaning up local configuration files..." -ForegroundColor Cyan
-
-$envLocalPath = Join-Path $PSScriptRoot ".." "frontend" ".env.local"
-if (Test-Path $envLocalPath) {
-    Remove-Item $envLocalPath -Force
-    Write-Host "  [OK] Deleted frontend/.env.local" -ForegroundColor Green
-}
-else {
-    Write-Host "  frontend/.env.local not found" -ForegroundColor Gray
-}
-
-# Clean up backend configuration
-$backendEnvPath = Join-Path $PSScriptRoot ".." "backend" "WebApp.Api" ".env"
-if (Test-Path $backendEnvPath) {
-    Remove-Item $backendEnvPath -Force
-    Write-Host "  [OK] Deleted backend/WebApp.Api/.env" -ForegroundColor Green
-}
-else {
-    Write-Host "  backend/WebApp.Api/.env not found" -ForegroundColor Gray
-}
-
-# --- Delete azd environment folder ---
-
-if ($envName) {
-    Write-Host "`nCleaning up azd environment..." -ForegroundColor Cyan
+    $scope = "/subscriptions/$subscriptionId/resourceGroups/$aiFoundryResourceGroup/providers/Microsoft.CognitiveServices/accounts/$aiFoundryResourceName"
     
-    $envFolder = Join-Path $PSScriptRoot ".." ".azure" $envName
+    az role assignment delete `
+        --assignee $webIdentityPrincipalId `
+        --role "Cognitive Services User" `
+        --scope $scope 2>&1 | Out-Null
+    
+    Write-Host "[OK] Role assignment removed (if it existed)" -ForegroundColor Green
+}
+
+# Delete Entra app
+if ($envName) {
+    $clientId = azd env get-value ENTRA_SPA_CLIENT_ID 2>$null
+    if ($clientId) {
+        az ad app delete --id $clientId 2>&1 | Out-Null
+        Write-Host "[OK] Entra app deleted: $clientId" -ForegroundColor Green
+    }
+}
+
+# Delete local config files
+$projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+@(
+    "frontend/.env.local",
+    "backend/WebApp.Api/.env"
+) | ForEach-Object {
+    $path = Join-Path $projectRoot $_
+    if (Test-Path $path) {
+        Remove-Item $path -Force
+        Write-Host "[OK] Deleted $_" -ForegroundColor Green
+    }
+}
+
+# Delete azd environment folder
+if ($envName) {
+    $envFolder = Join-Path $projectRoot ".azure" $envName
     if (Test-Path $envFolder) {
         Remove-Item $envFolder -Recurse -Force
-        Write-Host "  [OK] Deleted .azure/$envName environment folder" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  .azure/$envName not found" -ForegroundColor Gray
+        Write-Host "[OK] Deleted .azure/$envName" -ForegroundColor Green
     }
 }
 
-# --- Check if we should clean Docker images ---
-
-$cleanDockerImages = $env:CLEAN_DOCKER_IMAGES -eq "true"
-
-if ($cleanDockerImages) {
-    Write-Host "`nCleaning Docker images..." -ForegroundColor Yellow
-    
-    $images = docker images "ai-foundry-agent/*" -q
-    if ($images) {
-        $imageCount = ($images | Measure-Object).Count
-        Write-Host "Found $imageCount Docker image(s) to remove" -ForegroundColor Gray
-        
-        $images | ForEach-Object {
-            try {
-                docker rmi $_ -f
-            }
-            catch {
-                Write-Host "[!] Failed to remove image $_" -ForegroundColor Yellow
-            }
-        }
-        
-        Write-Host "[OK] Docker images removed" -ForegroundColor Green
-    }
-    else {
-        Write-Host "No Docker images found to clean" -ForegroundColor Gray
-    }
-}
-else {
-    Write-Host "`nDocker images PRESERVED (faster redeployment)" -ForegroundColor Green
-    
-    $images = docker images "ai-foundry-agent/*" -q
-    if ($images) {
-        $imageCount = ($images | Measure-Object).Count
-        Write-Host "  Preserved $imageCount Docker image(s)" -ForegroundColor Gray
-        Write-Host "`nTo clean Docker images next time:" -ForegroundColor Yellow
-        Write-Host '  $env:CLEAN_DOCKER_IMAGES = "true"' -ForegroundColor White
-        Write-Host "  azd down --force --purge" -ForegroundColor White
-    }
+# Optional Docker cleanup
+if ($env:CLEAN_DOCKER_IMAGES -eq "true" -and (Get-Command docker -EA SilentlyContinue)) {
+    docker images --filter "reference=*azurecr.io/web:*" -q | ForEach-Object { docker rmi $_ -f 2>$null }
+    Write-Host "[OK] Docker images cleaned" -ForegroundColor Green
 }
 
-# --- Check preserved artifacts ---
-
-Write-Host "`nPreserved local development artifacts:" -ForegroundColor Cyan
-
-$nodeModulesPath = Join-Path $PSScriptRoot ".." "frontend" "node_modules"
-if (Test-Path $nodeModulesPath) {
-    Write-Host "  [OK] frontend/node_modules (no need to reinstall)" -ForegroundColor Gray
-}
-
-# --- Success Message ---
-
-Write-Host "`n=====================================" -ForegroundColor Green
-Write-Host " Cleanup Complete!" -ForegroundColor Green
-Write-Host "=====================================" -ForegroundColor Green
-Write-Host "`nWhat was cleaned:" -ForegroundColor White
-Write-Host "  [OK] Azure resources (resource group)" -ForegroundColor Gray
-Write-Host "  [OK] Entra app registration" -ForegroundColor Gray
-Write-Host "  [OK] Local configuration files (.env.local, .env)" -ForegroundColor Gray
-Write-Host "  [OK] azd environment folder (.azure/$envName)" -ForegroundColor Gray
-Write-Host "`nWhat was preserved:" -ForegroundColor White
-Write-Host "  [OK] Node modules (faster setup)" -ForegroundColor Gray
-Write-Host "  [OK] Docker images (faster redeployment)" -ForegroundColor Gray
-Write-Host "`nTo redeploy:" -ForegroundColor Yellow
-Write-Host "  azd up" -ForegroundColor White
-Write-Host "`n"
+Write-Host "[OK] Cleanup complete. Run 'azd up' to redeploy." -ForegroundColor Green

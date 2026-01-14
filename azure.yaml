@@ -3,14 +3,23 @@ metadata:
   template: ai-foundry-agent@0.0.1
   location: eastus2
 
-# Infra-only pattern - no services defined
-# Container image deployment handled by hooks
-
+# Infra-only pattern - container build handled by hooks for local Docker support
 infra:
   path: ./infra
   module: main
 
 hooks:
+  # Pre-deploy: Build container (local Docker if available, ACR cloud build as fallback)
+  predeploy:
+    windows:
+      shell: pwsh
+      run: ./deployment/hooks/predeploy.ps1
+      continueOnError: false
+    posix:
+      shell: pwsh
+      run: ./deployment/hooks/predeploy.ps1
+      continueOnError: false
+
   # Phase 1: Create Entra app, generate config files
   preprovision:
     windows:
@@ -24,7 +33,7 @@ hooks:
 
   # Phase 2: Provision (automatic - Bicep templates with placeholder image)
   
-  # Phase 3: Build real image and deploy to Container App (runs after provision)
+  # Phase 3: Update Entra redirect URIs + assign RBAC to AI Foundry
   postprovision:
     windows:
       shell: pwsh

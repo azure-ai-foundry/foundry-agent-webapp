@@ -10,51 +10,53 @@ deployment/
 │   └── frontend.Dockerfile  # Single-container build (React + ASP.NET Core)
 ├── hooks/               # Azure Developer CLI lifecycle hooks
 │   ├── preprovision.ps1     # Create Entra app + discover AI Foundry + generate config
-│   ├── postprovision.ps1    # Build & deploy initial container
-│   └── postdown.ps1         # Cleanup (optional)
+│   ├── postprovision.ps1    # Update Entra redirect URIs + assign RBAC
+│   ├── predeploy.ps1        # Build container (local Docker or ACR cloud build)
+│   ├── postdown.ps1         # Cleanup (optional)
 │   └── modules/             # Reusable PowerShell modules
+│       ├── Get-AIFoundryAgents.ps1
 │       └── New-EntraAppRegistration.ps1
-└── scripts/             # User-invoked deployment scripts
-    ├── build-and-deploy-container.ps1  # Shared build/deploy logic (DRY)
-    ├── deploy.ps1                    # Quick deploy (code-only updates)
-    └── start-local-dev.ps1           # Start native local development
+└── scripts/             # User-invoked scripts
+    └── start-local-dev.ps1  # Start native local development
 ```
 
-## Key Files
+## Build Strategy
 
-| File | Purpose | When to Use |
-|------|---------|-------------|
-| `hooks/preprovision.ps1` | Discovery & config generation | Auto-runs during `azd up` |
-| `hooks/postprovision.ps1` | Initial build & deployment | Auto-runs during `azd up` |
-| `scripts/deploy.ps1` | Code-only deployment | Manual invocation for code changes |
-| `scripts/start-local-dev.ps1` | Local dev server startup | Manual invocation for development |
-| `scripts/build-and-deploy-container.ps1` | Shared build module | Called by postprovision & deploy |
-| `docker/frontend.Dockerfile` | Production build | Used by build scripts |
+Container builds use **local Docker when available** with **ACR cloud build as fallback**:
 
-## Hook Relationship
+| Docker Installed | Build Method | Speed |
+|------------------|--------------|-------|
+| ✅ Yes, running | Local Docker build + push to ACR | ~2 min |
+| ❌ No | ACR cloud build | ~4-5 min |
+
+This is handled automatically by `predeploy.ps1`.
+
+## Key Commands
+
+| Command | Purpose | When to Use |
+|---------|---------|-------------|
+| `azd up` | Full provision + deploy | Initial setup, infrastructure changes |
+| `azd deploy` | Code-only deployment | Fast iteration on code changes |
+| `azd down` | Tear down resources | Cleanup |
+
+## Hook Workflow
 
 ```
 azd up
   ├─ preprovision.ps1 (Entra + AI Foundry discovery + .env generation)
-  ├─ provision (Bicep deployment)
-  └─ postprovision.ps1 (calls build-and-deploy-container.ps1)
+  ├─ provision (Bicep deployment with placeholder image)
+  ├─ postprovision.ps1 (updates Entra redirect URIs + RBAC)
+  └─ predeploy.ps1 (builds container - local Docker or ACR cloud)
 
-deploy.ps1 (direct invocation)
-  └─ build-and-deploy-container.ps1
-
-build-and-deploy-container.ps1 (shared module)
-  ├─ Detects Docker availability
-  ├─ Local build + push OR ACR cloud build
-  └─ Updates Container App
+azd deploy
+  └─ predeploy.ps1 (builds + pushes + updates Container App)
 ```
 
 ## Quick Reference
 
-For complete commands and workflows, see `.github/copilot-instructions.md` → Development Workflow section.
-
 **Common tasks**:
 - First deployment: `azd up`
-- Deploy code changes: `.\deployment\scripts\deploy.ps1`
+- Deploy code changes: `azd deploy`
 - Local development: `.\deployment\scripts\start-local-dev.ps1`
 - Clean up: `azd down --force --purge`
 
@@ -62,10 +64,8 @@ For complete commands and workflows, see `.github/copilot-instructions.md` → D
 
 **Build strategy**: Multi-stage (React build → .NET build → Runtime)
 
-**Custom npm registries**: Add `.npmrc` to `frontend/` directory - automatically copied during build
+**Build args**: Client ID and Tenant ID are automatically passed to the Dockerfile from azd environment variables.
 
-**Build modes**:
-- Local Docker (faster, recommended): Uses installed Docker daemon
-- ACR cloud build (fallback): Uploads context to ACR for cloud build
+**Custom npm registries**: Add `.npmrc` to `frontend/` directory - automatically copied during build
 
 For AI-assisted development, see `.github/skills/deploying-to-azure/SKILL.md`.

@@ -1,132 +1,50 @@
 #!/usr/bin/env pwsh
-<#
-.SYNOPSIS
-    Validates local development configuration files
-
-.DESCRIPTION
-    Checks that frontend/.env.local and backend/WebApp.Api/.env
-    exist and contain valid (non-placeholder) configuration values.
-    
-    Returns exit code 0 on success, 1 on failure.
-
-.EXAMPLE
-    .\scripts\validate-config.ps1
-#>
+# Validates local development configuration files
 
 $ErrorActionPreference = "Stop"
-
-$validationErrors = @()
 $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$validationErrors = [System.Collections.ArrayList]::new()
 
-# --- Helper Functions ---
-
-function Write-ValidationError {
-    param([string]$Message)
-    Write-Host "  [ERROR] $Message" -ForegroundColor Red
+function Test-EnvVar {
+    param([string]$content, [string]$name, [string]$file)
+    $pattern = "$name=(\S+)"
+    if ($content -match $pattern -and $matches[1] -notmatch "PLACEHOLDER") {
+        Write-Host ("  OK: " + $name) -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host ("  ERROR: " + $name) -ForegroundColor Red
+        return $false
+    }
 }
 
-function Write-ValidationSuccess {
-    param([string]$Message)
-    Write-Host "  [OK] $Message" -ForegroundColor Green
-}
-
-# --- Check Frontend Configuration ---
-
-Write-Host "`nValidating frontend configuration..." -ForegroundColor Cyan
-
-$frontendEnv = Join-Path $projectRoot "frontend" ".env.local"
-if (-not (Test-Path $frontendEnv)) {
-    $validationErrors += "Missing: frontend/.env.local"
-    Write-ValidationError "frontend/.env.local not found"
-} else {
+# Frontend
+Write-Host "Frontend config:" -ForegroundColor Cyan
+$frontendEnv = Join-Path $projectRoot "frontend/.env.local"
+if (Test-Path $frontendEnv) {
     $content = Get-Content $frontendEnv -Raw
-    
-    # Check VITE_ENTRA_SPA_CLIENT_ID
-    if ($content -match "VITE_ENTRA_SPA_CLIENT_ID=(\S+)") {
-        $clientId = $matches[1]
-        if ([string]::IsNullOrWhiteSpace($clientId) -or $clientId -match "PLACEHOLDER") {
-            $validationErrors += "frontend/.env.local has invalid VITE_ENTRA_SPA_CLIENT_ID"
-            Write-ValidationError "VITE_ENTRA_SPA_CLIENT_ID is invalid or placeholder"
-        } else {
-            Write-ValidationSuccess "VITE_ENTRA_SPA_CLIENT_ID is valid"
-        }
-    } else {
-        $validationErrors += "frontend/.env.local missing VITE_ENTRA_SPA_CLIENT_ID"
-        Write-ValidationError "VITE_ENTRA_SPA_CLIENT_ID not found"
-    }
-    
-    # Check VITE_ENTRA_TENANT_ID
-    if ($content -match "VITE_ENTRA_TENANT_ID=(\S+)") {
-        $tenantId = $matches[1]
-        if ([string]::IsNullOrWhiteSpace($tenantId) -or $tenantId -match "PLACEHOLDER") {
-            $validationErrors += "frontend/.env.local has invalid VITE_ENTRA_TENANT_ID"
-            Write-ValidationError "VITE_ENTRA_TENANT_ID is invalid or placeholder"
-        } else {
-            Write-ValidationSuccess "VITE_ENTRA_TENANT_ID is valid"
-        }
-    } else {
-        $validationErrors += "frontend/.env.local missing VITE_ENTRA_TENANT_ID"
-        Write-ValidationError "VITE_ENTRA_TENANT_ID not found"
-    }
-}
-
-# --- Check Backend Configuration ---
-
-Write-Host "`nValidating backend configuration..." -ForegroundColor Cyan
-
-$backendEnv = Join-Path $projectRoot "backend" "WebApp.Api" ".env"
-if (-not (Test-Path $backendEnv)) {
-    $validationErrors += "Missing: backend/WebApp.Api/.env"
-    Write-ValidationError "backend/WebApp.Api/.env not found"
+    if (-not (Test-EnvVar $content "VITE_ENTRA_SPA_CLIENT_ID" "frontend/.env.local")) { $null = $validationErrors.Add("VITE_ENTRA_SPA_CLIENT_ID") }
+    if (-not (Test-EnvVar $content "VITE_ENTRA_TENANT_ID" "frontend/.env.local")) { $null = $validationErrors.Add("VITE_ENTRA_TENANT_ID") }
 } else {
-    $content = Get-Content $backendEnv -Raw
-    
-    # Check AzureAd__TenantId (double underscore is .NET environment variable format for nested config)
-    if ($content -match "AzureAd__TenantId=(\S+)") {
-        $tenantId = $matches[1]
-        if ([string]::IsNullOrWhiteSpace($tenantId) -or $tenantId -match "PLACEHOLDER") {
-            $validationErrors += "backend/WebApp.Api/.env has invalid AzureAd__TenantId"
-            Write-ValidationError "AzureAd__TenantId is invalid or placeholder"
-        } else {
-            Write-ValidationSuccess "AzureAd__TenantId is valid"
-        }
-    } else {
-        $validationErrors += "backend/WebApp.Api/.env missing AzureAd__TenantId"
-        Write-ValidationError "AzureAd__TenantId not found"
-    }
-    
-    # Check AzureAd__ClientId
-    if ($content -match "AzureAd__ClientId=(\S+)") {
-        $clientId = $matches[1]
-        if ([string]::IsNullOrWhiteSpace($clientId) -or $clientId -match "PLACEHOLDER") {
-            $validationErrors += "backend/WebApp.Api/.env has invalid AzureAd__ClientId"
-            Write-ValidationError "AzureAd__ClientId is invalid or placeholder"
-        } else {
-            Write-ValidationSuccess "AzureAd__ClientId is valid"
-        }
-    } else {
-        $validationErrors += "backend/WebApp.Api/.env missing AzureAd__ClientId"
-        Write-ValidationError "AzureAd__ClientId not found"
-    }
+    $null = $validationErrors.Add("frontend/.env.local not found")
+    Write-Host "  [ERROR] File not found" -ForegroundColor Red
 }
 
-# --- Report Results ---
+# Backend
+Write-Host "Backend config:" -ForegroundColor Cyan
+$backendEnv = Join-Path $projectRoot "backend/WebApp.Api/.env"
+if (Test-Path $backendEnv) {
+    $content = Get-Content $backendEnv -Raw
+    if (-not (Test-EnvVar $content "AzureAd__TenantId" "backend/.env")) { $null = $validationErrors.Add("AzureAd__TenantId") }
+    if (-not (Test-EnvVar $content "AzureAd__ClientId" "backend/.env")) { $null = $validationErrors.Add("AzureAd__ClientId") }
+} else {
+    $null = $validationErrors.Add("backend/.env not found")
+    Write-Host "  [ERROR] File not found" -ForegroundColor Red
+}
 
-Write-Host ""
 if ($validationErrors.Count -gt 0) {
-    Write-Host "❌ Configuration Validation Failed" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Errors found:" -ForegroundColor Yellow
-    foreach ($validationError in $validationErrors) {
-        Write-Host "  • $validationError" -ForegroundColor Red
-    }
-    Write-Host ""
-    Write-Host "To fix this, run:" -ForegroundColor Yellow
-    Write-Host "  azd up" -ForegroundColor White
-    Write-Host ""
+    Write-Host "`n[ERROR] Validation failed. Run 'azd up' to fix." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "✅ Configuration validated successfully" -ForegroundColor Green
-Write-Host ""
+Write-Host "`n[OK] Configuration valid" -ForegroundColor Green
 exit 0

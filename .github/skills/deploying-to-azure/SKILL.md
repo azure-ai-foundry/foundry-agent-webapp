@@ -57,23 +57,22 @@ runSubagent(
 | Command | Purpose | Time |
 |---------|---------|------|
 | `azd up` | Full deployment (Entra app + infrastructure + container) | 10-12 min |
-| `.\deployment\scripts\deploy.ps1` | Code-only deployment (Docker rebuild + push) | 3-5 min |
+| `azd deploy` | Code-only deployment (Docker rebuild + push) | 3-5 min |
 | `azd provision` | Re-run infrastructure + AI Foundry discovery | 5-7 min |
-
-**Note**: `azd deploy` is not used. This template uses an infra-only pattern where `postprovision` handles deployment.
 
 ## Deployment Phases
 
 1. **preprovision** → Entra app + AI Foundry auto-discovery + `.env` generation
-2. **provision** → Deploy Azure resources via Bicep
-3. **postprovision** → Updates redirect URIs + builds/deploys container
+2. **provision** → Deploy Azure resources via Bicep (placeholder container image)
+3. **postprovision** → Updates Entra redirect URIs + assigns RBAC to AI Foundry
+4. **predeploy** → Builds container (local Docker or ACR cloud build)
 
 **Implementation**: 
-- `deployment/hooks/preprovision.ps1` (discovery)
-- `deployment/hooks/postprovision.ps1` (container deployment)
+- `deployment/hooks/preprovision.ps1` (discovery + config generation)
+- `deployment/hooks/postprovision.ps1` (Entra redirect URIs + RBAC assignment)
+- `deployment/hooks/predeploy.ps1` (container build + push)
 - `deployment/hooks/modules/New-EntraAppRegistration.ps1` (Entra app creation)
 - `deployment/hooks/modules/Get-AIFoundryAgents.ps1` (agent discovery via REST)
-- `deployment/scripts/build-and-deploy-container.ps1` (shared build logic)
 
 ## Docker Multi-Stage Build
 
@@ -139,9 +138,22 @@ az role assignment list --assignee $principalId
 **What it does**:
 1. Gets Container App URL from Azure
 2. Updates Entra app redirect URIs (localhost + production)
-3. Calls `build-and-deploy-container.ps1` for Docker build + deploy
+3. Assigns Cognitive Services User role to Container App's managed identity on AI Foundry resource (via Azure CLI, not Bicep)
 
-## Docker Multi-Stage Build
+**Why RBAC via CLI?**: Using Azure CLI for role assignment prevents azd from tracking the external AI Foundry resource group, avoiding accidental deletion on `azd down`.
+
+## Predeploy Hook Details
+
+**File**: `deployment/hooks/predeploy.ps1`
+
+**What it does**:
+1. Detects if Docker is available and running
+2. Uses local Docker build + push if available (~2 min)
+3. Falls back to ACR cloud build if Docker unavailable (~4-5 min)
+4. Updates Container App with new image (if it exists)
+5. Sets `SERVICE_WEB_IMAGE_NAME` env var for Bicep
+
+## Dockerfile Example
 
 **File**: `deployment/docker/frontend.Dockerfile` (production build)
 
@@ -180,16 +192,3 @@ ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENTRYPOINT ["dotnet", "WebApp.Api.dll"]
 ```
-
-## Shared Build Module
-
-**File**: `deployment/scripts/build-and-deploy-container.ps1`
-
-**Usage**: Called by both `postprovision` hook and `deploy.ps1` script
-
-**Logic**:
-1. Detects if Docker is available and running
-2. Uses local Docker build + push if available
-3. Falls back to ACR cloud build if Docker unavailable
-4. Updates Container App with new image
-5. Returns Container App URL
