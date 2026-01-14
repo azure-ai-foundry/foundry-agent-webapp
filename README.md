@@ -4,11 +4,24 @@ AI-powered web application with Entra ID authentication and Azure AI Foundry Age
 
 ## Quick Start
 
+### Using this Template
+
 ```powershell
+# Clone or initialize from GitHub template
+azd init -t microsoft-foundry/foundry-agent-webapp
+
+# Deploy everything
 azd up  # Full deployment: ~10-12 minutes
 ```
 
-This command:
+**Alternative**: Use GitHub's "Use this template" button or clone directly:
+```powershell
+git clone https://github.com/microsoft-foundry/foundry-agent-webapp.git
+cd foundry-agent-webapp
+azd up
+```
+
+The `azd up` command:
 1. Creates Microsoft Entra ID app registration (automated)
 2. Deploys Azure infrastructure (ACR, Container Apps)
 3. Builds and deploys your application
@@ -19,14 +32,38 @@ This command:
 
 ## Prerequisites
 
-- **Azure Subscription** with Contributor role
-- **PowerShell 7+** - Cross-platform scripting (https://aka.ms/powershell)
+### Windows
+- **PowerShell 7+** - `winget install Microsoft.PowerShell`
 - **Azure Developer CLI (azd)** - `winget install microsoft.azd`
-- **Bicep CLI** - Installed automatically with `azd`, or manually: `az bicep install`
+- **Azure CLI** - `winget install Microsoft.AzureCLI`
+- **Docker Desktop** (optional) - https://docs.docker.com/desktop/install/windows-install/
 - **.NET 9 SDK** - https://dot.net
 - **Node.js 18+** - https://nodejs.org
+
+### macOS
+- **PowerShell 7+** - `brew install powershell` or [download](https://github.com/PowerShell/PowerShell/releases)
+- **Azure Developer CLI (azd)** - `brew tap azure/azd && brew install azd` or `curl -fsSL https://aka.ms/install-azd.sh | bash`
+- **Azure CLI** - `brew install azure-cli` or `curl -L https://aka.ms/InstallAzureCli | bash`
+- **Docker Desktop** (optional) - `brew install --cask docker` or [download](https://www.docker.com/products/docker-desktop/)
+- **.NET 9 SDK** - https://dot.net
+- **Node.js 18+** - `brew install node` or https://nodejs.org
+
+> **Homebrew not installed?** Commands work without Homebrew using direct installers. The deployment script (`azd up`) checks for Homebrew and provides appropriate installation instructions.
+
+### Linux
+- **PowerShell 7+** - https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux
+- **Azure Developer CLI (azd)** - `curl -fsSL https://aka.ms/install-azd.sh | bash`
+- **Azure CLI** - https://learn.microsoft.com/cli/azure/install-azure-cli-linux
+- **Docker Engine** (optional) - https://docs.docker.com/engine/install/
+- **.NET 9 SDK** - https://dot.net
+- **Node.js 18+** - https://nodejs.org
+
+### Azure Requirements
+- **Azure Subscription** with Contributor role
+- **Bicep CLI** - Installed automatically with `azd`, or manually: `az bicep install`
 - **Azure AI Foundry Resource** - Create at https://ai.azure.com with at least one agent
-- **Docker Desktop** (optional) - For local builds. If not installed, `azd` uses Azure Container Registry cloud build.
+
+> **Note**: Docker is optional. If not installed, `azd` automatically uses Azure Container Registry cloud build for deployment.
 
 ### Custom npm Registries
 
@@ -41,7 +78,14 @@ registry=https://your-registry.example.com/
 
 ### Organization-Specific Requirements
 
-If your organization has custom Entra ID policies, you may need to set environment variables before deployment. See [deployment/hooks/README.md](deployment/hooks/README.md#app-registration-policies) for details.
+If your organization has custom Entra ID policies (e.g., requires service management reference for app registrations), set this environment variable before deployment:
+
+```powershell
+# For tenants requiring service management metadata
+azd env set ENTRA_SERVICE_MANAGEMENT_REFERENCE "https://portal.azure.com/#blade/Microsoft_AAD_IAM/ManagedAppMenuBlade/..."
+```
+
+See [deployment/hooks/README.md](deployment/hooks/README.md#app-registration-policies) for more organization-specific configuration options.
 
 ## VS Code Configuration
 

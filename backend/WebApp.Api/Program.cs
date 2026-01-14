@@ -197,7 +197,14 @@ app.MapPost("/api/chat/stream", async (
             request.ImageDataUris,
             cancellationToken))
         {
-            await WriteChunkEvent(httpContext.Response, chunk, cancellationToken);
+            if (chunk.IsText && chunk.TextDelta != null)
+            {
+                await WriteChunkEvent(httpContext.Response, chunk.TextDelta, cancellationToken);
+            }
+            else if (chunk.HasAnnotations && chunk.Annotations != null)
+            {
+                await WriteAnnotationsEvent(httpContext.Response, chunk.Annotations, cancellationToken);
+            }
         }
 
         var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
@@ -256,6 +263,27 @@ static async Task WriteConversationIdEvent(HttpResponse response, string convers
 static async Task WriteChunkEvent(HttpResponse response, string content, CancellationToken ct)
 {
     var json = System.Text.Json.JsonSerializer.Serialize(new { type = "chunk", content });
+    await response.WriteAsync($"data: {json}\n\n", ct);
+    await response.Body.FlushAsync(ct);
+}
+
+static async Task WriteAnnotationsEvent(HttpResponse response, List<WebApp.Api.Models.AnnotationInfo> annotations, CancellationToken ct)
+{
+    var json = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        type = "annotations",
+        annotations = annotations.Select(a => new
+        {
+            type = a.Type,
+            label = a.Label,
+            url = a.Url,
+            fileId = a.FileId,
+            textToReplace = a.TextToReplace,
+            startIndex = a.StartIndex,
+            endIndex = a.EndIndex,
+            quote = a.Quote
+        })
+    });
     await response.WriteAsync($"data: {json}\n\n", ct);
     await response.Body.FlushAsync(ct);
 }

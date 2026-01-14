@@ -150,10 +150,7 @@ export class ChatService {
       signal,
     });
 
-    console.log(`[ChatService] Response status: ${res.status} ${res.statusText}`);
-
     if (!res.ok) {
-      console.error(`[ChatService] Response not OK: ${res.status} ${res.statusText}`);
       const errorMessage = await parseErrorFromResponse(res);
       const errorCode = getErrorCodeFromResponse(res);
       throw createAppError(new Error(errorMessage), errorCode);
@@ -348,6 +345,16 @@ export class ChatService {
               }
               break;
 
+            case 'annotations':
+              if (event.data.annotations && event.data.annotations.length > 0) {
+                this.dispatch({
+                  type: 'CHAT_STREAM_ANNOTATIONS',
+                  messageId,
+                  annotations: event.data.annotations,
+                });
+              }
+              break;
+
             case 'usage':
               this.dispatch({
                 type: 'CHAT_STREAM_COMPLETE',
@@ -375,14 +382,9 @@ export class ChatService {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError' && this.streamCancelled) {
-        console.log('[ChatService] Stream intentionally cancelled by user');
+        // User intentionally cancelled the stream - not an error condition
         return;
       }
-
-      console.error('[ChatService] Stream processing error:', error, {
-        conversationId: currentConversationId,
-        messageId,
-      });
 
       const appError =
         error instanceof Error && 'code' in error
@@ -429,7 +431,6 @@ export class ChatService {
     if (this.currentStreamAbort) {
       this.streamCancelled = true;
       this.currentStreamAbort.abort();
-      console.log('[ChatService] Stream cancellation requested');
       this.dispatch({ type: 'CHAT_CANCEL_STREAM' });
     }
   }

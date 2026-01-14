@@ -110,6 +110,32 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       };
     }
 
+    case 'CHAT_STREAM_ANNOTATIONS': {
+      // Add annotations to the streaming message
+      const messageIndex = state.chat.messages.findIndex(
+        msg => msg.id === action.messageId
+      );
+      
+      if (messageIndex === -1) {
+        return state;
+      }
+      
+      const updatedMessages = [...state.chat.messages];
+      const existingAnnotations = updatedMessages[messageIndex].annotations || [];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        annotations: [...existingAnnotations, ...action.annotations],
+      };
+      
+      return {
+        ...state,
+        chat: {
+          ...state.chat,
+          messages: updatedMessages,
+        },
+      };
+    }
+
     case 'CHAT_STREAM_COMPLETE': {
       // Update the completed message with usage info
       const updatedMessages = state.chat.messages.map(msg =>

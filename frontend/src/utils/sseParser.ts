@@ -2,7 +2,7 @@
  * SSE event types from Azure AI Agent streaming API.
  * Contract: Backend sends Server-Sent Events with these event types.
  */
-export type SseEventType = 'conversationId' | 'chunk' | 'usage' | 'done' | 'error';
+export type SseEventType = 'conversationId' | 'chunk' | 'annotations' | 'usage' | 'done' | 'error';
 
 export interface SseEvent {
   type: SseEventType;
@@ -20,6 +20,22 @@ export interface SseChunkEvent extends SseEvent {
   type: 'chunk';
   data: {
     content: string;
+  };
+}
+
+export interface SseAnnotationsEvent extends SseEvent {
+  type: 'annotations';
+  data: {
+    annotations: Array<{
+      type: string;
+      label: string;
+      url?: string;
+      fileId?: string;
+      textToReplace?: string;
+      startIndex?: number;
+      endIndex?: number;
+      quote?: string;
+    }>;
   };
 }
 

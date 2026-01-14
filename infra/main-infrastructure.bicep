@@ -4,13 +4,19 @@ param resourceToken string
 
 var abbrs = loadJsonContent('./abbreviations.json')
 
+var defaultTags = {
+  'azd-env-name': resourceToken
+}
+
+var allTags = union(tags, defaultTags)
+
 // Log Analytics Workspace
 module logAnalytics './core/host/log-analytics.bicep' = {
   name: 'log-analytics'
   params: {
     name: '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
     location: location
-    tags: tags
+    tags: allTags
   }
 }
 
@@ -20,7 +26,7 @@ module containerRegistry './core/host/container-registry.bicep' = {
   params: {
     name: '${abbrs.containerRegistryRegistries}${resourceToken}'
     location: location
-    tags: tags
+    tags: allTags
   }
 }
 
@@ -30,7 +36,7 @@ module containerAppsEnvironment './core/host/container-apps-environment.bicep' =
   params: {
     name: '${abbrs.appManagedEnvironments}${resourceToken}'
     location: location
-    tags: tags
+    tags: allTags
     logAnalyticsWorkspaceId: logAnalytics.outputs.id
   }
 }

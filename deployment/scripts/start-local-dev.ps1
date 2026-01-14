@@ -170,33 +170,57 @@ if (Test-Path $validatorScript) {
 
 # --- Port Cleanup ---
 
+function Get-ProcessIdOnPort {
+    param([int]$Port)
+    
+    $processIds = @()
+    
+    if ($IsWindows) {
+        # Windows: use netstat
+        $connections = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
+        foreach ($connection in $connections) {
+            if ($connection -match '\s+(\d+)\s*$') {
+                $processIds += [int]$Matches[1]
+            }
+        }
+    } else {
+        # MacOS/Linux: use lsof
+        $lsofOutput = lsof -i ":$Port" -sTCP:LISTEN -t 2>$null
+        if ($lsofOutput) {
+            $processIds = $lsofOutput -split "`n" | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ }
+        }
+    }
+    
+    return $processIds
+}
+
 function Stop-ProcessOnPort {
     param([int]$Port, [string]$ServiceName)
     
-    # Find process using the port
-    $connections = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
+    $processIds = Get-ProcessIdOnPort -Port $Port
     
-    if ($connections) {
-        foreach ($connection in $connections) {
-            # Extract PID from netstat output (last column)
-            if ($connection -match '\s+(\d+)\s*$') {
-                $processId = $Matches[1]
-                try {
-                    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-                    if ($process) {
-                        Write-Host "  Found $ServiceName process on port $Port (PID: $processId, Name: $($process.Name))" -ForegroundColor Yellow
-                        Write-Host "  Stopping process..." -ForegroundColor Gray
-                        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                        Start-Sleep -Milliseconds 500
-                        Write-Success "Stopped process $processId"
-                    }
-                }
-                catch {
-                    Write-Warning "Could not stop process $processId : $_"
-                }
+    foreach ($processId in $processIds) {
+        try {
+            $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            if ($process) {
+                Write-Host "  Found $ServiceName process on port $Port (PID: $processId, Name: $($process.Name))" -ForegroundColor Yellow
+                Write-Host "  Stopping process..." -ForegroundColor Gray
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 500
+                Write-Success "Stopped process $processId"
             }
         }
+        catch {
+            Write-Warning "Could not stop process $processId : $_"
+        }
     }
+}
+
+function Test-PortInUse {
+    param([int]$Port)
+    
+    $processIds = Get-ProcessIdOnPort -Port $Port
+    return ($processIds.Count -gt 0)
 }
 
 Write-Status "Checking for Port Conflicts"
@@ -209,8 +233,8 @@ Stop-ProcessOnPort -Port 5173 -ServiceName "frontend"
 
 # Verify ports are free
 Start-Sleep -Seconds 1
-$port8080Free = -not (netstat -ano | Select-String ":8080\s" | Select-String "LISTENING")
-$port5173Free = -not (netstat -ano | Select-String ":5173\s" | Select-String "LISTENING")
+$port8080Free = -not (Test-PortInUse -Port 8080)
+$port5173Free = -not (Test-PortInUse -Port 5173)
 
 if ($port8080Free -and $port5173Free) {
     Write-Success "Ports 8080 and 5173 are available"
@@ -229,11 +253,34 @@ $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 # Start both servers in parallel
 Write-Host "`nStarting backend (ASP.NET Core on port 8080)..." -ForegroundColor Cyan
 $backendPath = Join-Path $projectRoot "backend" "WebApp.Api"
-Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host '=== Backend (ASP.NET Core) ===' -ForegroundColor Green; dotnet watch run --no-hot-reload"
 
 Write-Host "Starting frontend (React with HMR on port 5173)..." -ForegroundColor Cyan
 $frontendPath = Join-Path $projectRoot "frontend"
-Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$frontendPath'; Write-Host '=== Frontend (React + Vite) ===' -ForegroundColor Blue; npm run dev"
+
+if ($IsWindows) {
+    # Windows: spawn new terminal windows
+    Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; Write-Host '=== Backend (ASP.NET Core) ===' -ForegroundColor Green; dotnet watch run --no-hot-reload"
+    Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$frontendPath'; Write-Host '=== Frontend (React + Vite) ===' -ForegroundColor Blue; npm run dev"
+} else {
+    # MacOS/Linux: use background jobs (works in any terminal)
+    $backendJob = Start-Job -ScriptBlock {
+        param($path)
+        Set-Location $path
+        dotnet watch run --no-hot-reload 2>&1
+    } -ArgumentList $backendPath
+    
+    $frontendJob = Start-Job -ScriptBlock {
+        param($path)
+        Set-Location $path
+        npm run dev 2>&1
+    } -ArgumentList $frontendPath
+    
+    Write-Host "`nBackground jobs started:" -ForegroundColor Gray
+    Write-Host "  Backend job ID: $($backendJob.Id)" -ForegroundColor Gray
+    Write-Host "  Frontend job ID: $($frontendJob.Id)" -ForegroundColor Gray
+    Write-Host "`nTo view logs: Receive-Job -Id <job-id>" -ForegroundColor Gray
+    Write-Host "To stop: Stop-Job -Id <job-id> | Remove-Job" -ForegroundColor Gray
+}
 
 # Give processes a moment to start, then open browser
 Write-Host "`nBoth servers starting in parallel..." -ForegroundColor Gray
@@ -242,7 +289,18 @@ Start-Sleep -Seconds 3
 # Open browser
 if (-not $SkipBrowser) {
     Write-Host "Opening browser..." -ForegroundColor Cyan
-    Start-Process "http://localhost:5173"
+    if ($IsWindows) {
+        Start-Process "http://localhost:5173"
+    } elseif ($IsMacOS) {
+        open "http://localhost:5173"
+    } else {
+        # Linux: try xdg-open
+        if (Test-Command "xdg-open") {
+            xdg-open "http://localhost:5173"
+        } else {
+            Write-Host "Open http://localhost:5173 in your browser" -ForegroundColor Yellow
+        }
+    }
 }
 
 # --- Success Message ---
@@ -270,7 +328,12 @@ Write-Host "`nTo deploy to Azure:" -ForegroundColor Yellow
 Write-Host "  azd deploy" -ForegroundColor White
 
 Write-Host "`nTo stop:" -ForegroundColor Yellow
-Write-Host "  Close the backend and frontend terminal windows" -ForegroundColor White
-Write-Host "  Or press Ctrl+C in each terminal" -ForegroundColor White
+if ($IsWindows) {
+    Write-Host "  Close the backend and frontend terminal windows" -ForegroundColor White
+    Write-Host "  Or press Ctrl+C in each terminal" -ForegroundColor White
+} else {
+    Write-Host "  Stop-Job * | Remove-Job" -ForegroundColor White
+    Write-Host "  Or run: Get-Job | Stop-Job | Remove-Job" -ForegroundColor White
+}
 
 Write-Host "`n"

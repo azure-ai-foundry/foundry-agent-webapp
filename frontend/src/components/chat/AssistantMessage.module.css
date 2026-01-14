@@ -57,3 +57,77 @@
   color: var(--colorNeutralForeground3);
   margin-right: 8px;
 }
+
+/* Citation list container */
+.citationList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Citation button - matches Azure AI Foundry style */
+.citation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 6px;
+  background-color: var(--colorNeutralBackground1);
+  border: 1px solid var(--colorNeutralStroke1);
+  cursor: default;
+  font-size: 13px;
+  color: var(--colorNeutralForeground1);
+  overflow: hidden;
+}
+
+/* Numbered badge box on left */
+.citationNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 100%;
+  padding: 6px 8px;
+  background-color: var(--colorNeutralBackground3);
+  border-right: 1px solid var(--colorNeutralStroke1);
+  color: var(--colorNeutralForeground2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Icon and label container */
+.citationContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.citationIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--colorNeutralForeground3);
+}
+
+.citationLabel {
+  color: var(--colorNeutralForeground1);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footnote layout */
+.footnoteContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metadataRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

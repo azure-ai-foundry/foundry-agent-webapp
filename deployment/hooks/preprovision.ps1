@@ -11,9 +11,73 @@ Write-Host ""
 # Validate prerequisites
 Write-Host "Validating prerequisites..." -ForegroundColor Cyan
 
-if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-    Write-Error "Azure CLI not found. Install from https://aka.ms/azure-cli"
+# On macOS, check if Homebrew is available (helpful but not required)
+$hasHomebrew = $false
+if ($IsMacOS) {
+    $hasHomebrew = $null -ne (Get-Command brew -ErrorAction SilentlyContinue)
+    if ($hasHomebrew) {
+        Write-Host "[OK] Homebrew found" -ForegroundColor Green
+    } else {
+        Write-Host "[INFO] Homebrew not found (optional, but makes installation easier)" -ForegroundColor Gray
+    }
+}
+
+# Check for PowerShell (pwsh)
+if (-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    Write-Error "PowerShell Core (pwsh) not found."
+    if ($IsMacOS) {
+        if ($hasHomebrew) {
+            Write-Host "Install with: brew install powershell" -ForegroundColor Yellow
+        } else {
+            Write-Host "Install Homebrew first: /bin/bash -c `"`$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)`"" -ForegroundColor Yellow
+            Write-Host "Then run: brew install powershell" -ForegroundColor Yellow
+            Write-Host "Or download directly: https://github.com/PowerShell/PowerShell/releases" -ForegroundColor Yellow
+        }
+    } elseif ($IsLinux) {
+        Write-Host "Install from: https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux" -ForegroundColor Yellow
+    } else {
+        Write-Host "Install from: https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows" -ForegroundColor Yellow
+    }
     exit 1
+}
+Write-Host "[OK] PowerShell Core found" -ForegroundColor Green
+
+# Check for Azure CLI
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    Write-Error "Azure CLI not found."
+    if ($IsMacOS) {
+        if ($hasHomebrew) {
+            Write-Host "Install with: brew install azure-cli" -ForegroundColor Yellow
+        } else {
+            Write-Host "Install with: curl -L https://aka.ms/InstallAzureCli | bash" -ForegroundColor Yellow
+            Write-Host "Or download installer: https://aka.ms/InstallAzureCliMacOS" -ForegroundColor Yellow
+        }
+    } elseif ($IsLinux) {
+        Write-Host "Install from: https://learn.microsoft.com/cli/azure/install-azure-cli-linux" -ForegroundColor Yellow
+    } else {
+        Write-Host "Install from: https://aka.ms/azure-cli" -ForegroundColor Yellow
+    }
+    exit 1
+}
+Write-Host "[OK] Azure CLI found" -ForegroundColor Green
+
+# Check for Docker
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Warning "Docker not found. Docker is required for container deployment."
+    if ($IsMacOS) {
+        if ($hasHomebrew) {
+            Write-Host "Install with: brew install --cask docker" -ForegroundColor Yellow
+        } else {
+            Write-Host "Download Docker Desktop: https://www.docker.com/products/docker-desktop/" -ForegroundColor Yellow
+        }
+    } elseif ($IsLinux) {
+        Write-Host "Install Docker Engine from: https://docs.docker.com/engine/install/" -ForegroundColor Yellow
+    } else {
+        Write-Host "Install Docker Desktop from: https://docs.docker.com/desktop/install/windows-install/" -ForegroundColor Yellow
+    }
+    Write-Host "Note: ACR cloud build will be used as fallback if Docker is unavailable" -ForegroundColor Yellow
+} else {
+    Write-Host "[OK] Docker found" -ForegroundColor Green
 }
 
 $account = az account show 2>$null | ConvertFrom-Json

@@ -31,14 +31,18 @@ param entraTenantId string = tenant().tenantId
 @description('Container image for web service (set by postprovision hook)')
 param webImageName string = 'mcr.microsoft.com/k8se/quickstart:latest'  // Placeholder during initial provision
 
+@description('Default tags applied by Azure Policy (optional)')
+param defaultTags object = {}
+
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
-var tags = {
+var appTags = {
   'azd-env-name': environmentName
   'app-name': 'ai-foundry-agent'
 }
 
-// Create resource group
+var tags = union(defaultTags, appTags)
+
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: '${abbrs.resourcesResourceGroups}${environmentName}'
   location: location

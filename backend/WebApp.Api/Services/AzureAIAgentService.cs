@@ -1,3 +1,4 @@
+using Azure.AI.Agents.Persistent;
 using Azure.AI.Projects;
 using Azure.AI.Projects.OpenAI;
 using Azure.Core;
@@ -18,6 +19,7 @@ public class AzureAIAgentService : IDisposable
     private AgentVersion? _latestAgentVersion;
     private AgentMetadataResponse? _cachedMetadata; // Cache metadata to avoid repeated calls
     private readonly SemaphoreSlim _agentLock = new(1, 1);
+    private readonly CancellationTokenSource _disposeCts = new();
     private UsageInfo? _lastRunUsage;
     private bool _disposed = false;
 
@@ -73,8 +75,18 @@ public class AzureAIAgentService : IDisposable
         {
             try 
             {
-                await GetAgentAsync();
+                await GetAgentAsync(_disposeCts.Token);
                 _logger.LogInformation("Agent pre-loaded successfully at startup");
+            }
+            catch (OperationCanceledException)
+            {
+                // Service was disposed during startup - this is expected during hot reload
+                _logger.LogDebug("Agent pre-load cancelled due to service disposal");
+            }
+            catch (ObjectDisposedException)
+            {
+                // Service was disposed during startup - this is expected during hot reload
+                _logger.LogDebug("Agent pre-load cancelled due to service disposal");
             }
             catch (Exception ex)
             {
@@ -204,9 +216,9 @@ public class AzureAIAgentService : IDisposable
 
     /// <summary>
     /// Streams agent response for a message in a conversation with optional image attachments.
-    /// Returns chunks of text as they arrive, capturing usage metrics for the run.
+    /// Returns StreamChunk objects containing either text deltas or annotations (citations).
     /// </summary>
-    public async IAsyncEnumerable<string> StreamMessageAsync(
+    public async IAsyncEnumerable<StreamChunk> StreamMessageAsync(
         string conversationId,
         string message,
         List<string>? imageDataUris = null,
@@ -232,23 +244,180 @@ public class AzureAIAgentService : IDisposable
         ProjectResponsesClient responsesClient
             = _projectClient.OpenAI.GetProjectResponsesClientForAgent(agent, conversationId);
 
+        CreateResponseOptions options = new()
+        {
+            InputItems = { userMessage },
+            StreamingEnabled = true
+        };
+
+        // Dictionary to collect file search results for quote extraction
+        // FileSearchCallResponseItem arrives before MessageResponseItem with annotations
+        var fileSearchQuotes = new Dictionary<string, string>();
+
         await foreach (StreamingResponseUpdate update
             in responsesClient.CreateResponseStreamingAsync(
-                inputItems: [userMessage],
-                options: new ResponseCreationOptions(),
+                options: options,
                 cancellationToken: cancellationToken))
         {
             if (update is StreamingResponseOutputTextDeltaUpdate deltaUpdate)
             {
-                yield return deltaUpdate.Delta;
+                yield return StreamChunk.Text(deltaUpdate.Delta);
             }
-            if (update is StreamingResponseCompletedUpdate completedUpdate)
+            else if (update is StreamingResponseOutputItemDoneUpdate itemDoneUpdate)
+            {
+                // Capture file search results for quote extraction
+                if (itemDoneUpdate.Item is FileSearchCallResponseItem fileSearchItem)
+                {
+                    foreach (var result in fileSearchItem.Results)
+                    {
+                        if (!string.IsNullOrEmpty(result.FileId) && !string.IsNullOrEmpty(result.Text))
+                        {
+                            fileSearchQuotes[result.FileId] = result.Text;
+                            _logger.LogDebug(
+                                "Captured file search quote for FileId={FileId}, QuoteLength={Length}", 
+                                result.FileId, 
+                                result.Text.Length);
+                        }
+                    }
+                    continue;
+                }
+                
+                // Extract annotations/citations from completed output items
+                var annotations = ExtractAnnotations(itemDoneUpdate.Item, fileSearchQuotes);
+                if (annotations.Count > 0)
+                {
+                    _logger.LogInformation("Extracted {Count} annotations from response", annotations.Count);
+                    yield return StreamChunk.WithAnnotations(annotations);
+                }
+                else
+                {
+                    _logger.LogDebug("Output item completed: {ItemType}", itemDoneUpdate.Item?.GetType().Name);
+                }
+            }
+            else if (update is StreamingResponseFunctionCallArgumentsDoneUpdate)
+            {
+                // Function/tool call arguments received - future enhancement (Issue #15)
+                _logger.LogDebug("Function call arguments completed");
+            }
+            else if (update is StreamingResponseErrorUpdate errorUpdate)
+            {
+                _logger.LogError("Stream error: {Error}", errorUpdate.Message);
+                throw new InvalidOperationException($"Stream error: {errorUpdate.Message}");
+            }
+            else if (update is StreamingResponseCompletedUpdate completedUpdate)
             {
                 _lastRunUsage = ExtractUsageInfo(completedUpdate.Response.Usage);
             }
         }
 
         _logger.LogInformation("Completed streaming response for conversation: {ConversationId}", conversationId);
+    }
+
+    /// <summary>
+    /// Extracts annotation information from a completed response item.
+    /// Handles all annotation types from the OpenAI.Responses SDK:
+    /// - UriCitationMessageAnnotation: Bing, Azure AI Search, SharePoint citations
+    /// - FileCitationMessageAnnotation: File search citations from vector stores
+    /// - FilePathMessageAnnotation: File paths generated by code interpreter
+    /// - ContainerFileCitationMessageAnnotation: Container file citations
+    /// </summary>
+    /// <param name="item">The completed response item to extract annotations from</param>
+    /// <param name="fileSearchQuotes">Dictionary mapping FileId to quote text from file search results</param>
+    private List<AnnotationInfo> ExtractAnnotations(
+        ResponseItem? item, 
+        Dictionary<string, string>? fileSearchQuotes = null)
+    {
+        var annotations = new List<AnnotationInfo>();
+        
+        if (item is not MessageResponseItem messageItem)
+        {
+            _logger.LogDebug("ExtractAnnotations: Item is not MessageResponseItem, type: {Type}", item?.GetType().Name ?? "null");
+            return annotations;
+        }
+
+        _logger.LogDebug("ExtractAnnotations: Processing MessageResponseItem with {Count} content items", messageItem.Content.Count);
+
+        foreach (var content in messageItem.Content)
+        {
+            var annotationCount = content.OutputTextAnnotations?.Count ?? 0;
+            _logger.LogDebug("ExtractAnnotations: Content has {Count} OutputTextAnnotations", annotationCount);
+            
+            if (content.OutputTextAnnotations == null) continue;
+            
+            foreach (var annotation in content.OutputTextAnnotations)
+            {
+                _logger.LogDebug("ExtractAnnotations: Found annotation Kind={Kind}, Type={Type}", 
+                    annotation.Kind, annotation.GetType().Name);
+                
+                var annotationInfo = annotation switch
+                {
+                    // URI citations from Bing, Azure AI Search, SharePoint
+                    UriCitationMessageAnnotation uriAnnotation => new AnnotationInfo
+                    {
+                        Type = "uri_citation",
+                        Label = uriAnnotation.Title ?? "Source",
+                        Url = uriAnnotation.Uri?.ToString(),
+                        StartIndex = uriAnnotation.StartIndex,
+                        EndIndex = uriAnnotation.EndIndex
+                    },
+                    
+                    // File citations from file search (vector stores)
+                    FileCitationMessageAnnotation fileCitation => new AnnotationInfo
+                    {
+                        Type = "file_citation",
+                        Label = fileCitation.Filename ?? "File",
+                        FileId = fileCitation.FileId,
+                        StartIndex = fileCitation.Index,
+                        EndIndex = fileCitation.Index,
+                        // Look up quote from file search results
+                        Quote = fileSearchQuotes?.TryGetValue(fileCitation.FileId, out var quote) == true 
+                            ? quote 
+                            : null
+                    },
+                    
+                    // File paths generated by code interpreter
+                    FilePathMessageAnnotation filePath => new AnnotationInfo
+                    {
+                        Type = "file_path",
+                        Label = "Generated File",
+                        FileId = filePath.FileId,
+                        StartIndex = filePath.Index,
+                        EndIndex = filePath.Index
+                    },
+                    
+                    // Container file citations
+                    ContainerFileCitationMessageAnnotation containerCitation => new AnnotationInfo
+                    {
+                        Type = "container_file_citation",
+                        Label = containerCitation.Filename ?? "Container File",
+                        FileId = containerCitation.FileId,
+                        StartIndex = containerCitation.StartIndex,
+                        EndIndex = containerCitation.EndIndex,
+                        // Look up quote from file search results
+                        Quote = fileSearchQuotes?.TryGetValue(containerCitation.FileId, out var containerQuote) == true 
+                            ? containerQuote 
+                            : null
+                    },
+                    
+                    // Unknown annotation type - log for debugging
+                    _ => null
+                };
+                
+                if (annotationInfo != null)
+                {
+                    annotations.Add(annotationInfo);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Unknown annotation type: Kind={Kind}, Type={Type}",
+                        annotation.Kind,
+                        annotation.GetType().FullName);
+                }
+            }
+        }
+
+        return annotations;
     }
 
     /// <summary>
@@ -296,7 +465,7 @@ public class AzureAIAgentService : IDisposable
             string mediaType = dataUri["data:".Length..semiIndex].ToLowerInvariant();
             if (!allowedMimeTypes.Contains(mediaType))
             {
-                errors.Add($"Image {i + 1}: Unsupported MIME type '{mediaType}' (allowed: PNG, JPEG, GIF, WebP)");
+                errors.Add($"Image {i + 1}: Unsupported type '{mediaType}'. Allowed: PNG, JPEG, GIF, WebP");
                 continue;
             }
             
@@ -387,8 +556,17 @@ public class AzureAIAgentService : IDisposable
     {
         if (!_disposed)
         {
-            _agentLock.Dispose();
             _disposed = true;
+            
+            // Cancel any pending operations first
+            try
+            {
+                _disposeCts.Cancel();
+            }
+            catch (ObjectDisposedException) { }
+            
+            _disposeCts.Dispose();
+            _agentLock.Dispose();
             _logger.LogDebug("AzureAIAgentService disposed");
         }
     }

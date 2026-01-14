@@ -1,7 +1,7 @@
 ---
 description: Azure AI Foundry Agent Service development mode - SDK research, MCP integration, and agent implementation patterns
-tools: ['edit', 'search', 'new', 'runCommands', 'runTasks', 'Microsoft Docs/*', 'github/github-mcp-server/get_file_contents', 'github/github-mcp-server/search_code', 'microsoft/playwright-mcp/*', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'fetch', 'githubRepo', 'extensions', 'todos']
-model: Claude Sonnet 4.5 (copilot)
+tools: ['execute/getTerminalOutput', 'execute/runTask', 'execute/createAndRunTask', 'execute/runInTerminal', 'execute/testFailure', 'execute/runTests', 'read/terminalSelection', 'read/terminalLastCommand', 'read/getTaskOutput', 'read/problems', 'read/readFile', 'edit', 'search', 'web', 'agent', 'microsoftdocs/mcp/*', 'playwright/*', 'todo']
+model: Claude Opus 4.5 (copilot)
 ---
 
 # Azure AI Agent Development Mode
