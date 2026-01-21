@@ -111,8 +111,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [hasMessages, disabled]);
 
   const handleSubmit = () => {
-    if (inputText && inputText.trim() !== "") {
-      onSubmit(inputText.trim(), selectedFiles.length > 0 ? selectedFiles : undefined);
+    const trimmed = inputText.trim();
+    if (!trimmed) return;
+
+    // Defensive guard in case the underlying input component changes behavior.
+    if (trimmed.length > CHAR_MAX_RECOMMENDED) {
+      dispatchToast(
+        <Toast>
+          <ToastTitle>Message is too long. Maximum is {CHAR_MAX_RECOMMENDED} characters.</ToastTitle>
+        </Toast>,
+        { intent: 'warning' }
+      );
+      return;
+    }
+
+    if (inputText) {
+      onSubmit(trimmed, selectedFiles.length > 0 ? selectedFiles : undefined);
       setInputText("");
       setSelectedFiles([]);
       controlRef.current?.setInputText("");
@@ -250,6 +264,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-describedby={showCounter ? charCounterId : undefined}
           charactersRemainingMessage={() => ``}
           disabled={disabled || isStreaming}
+          maxLength={CHAR_MAX_RECOMMENDED}
           history={true}
           onChange={(_, data) => setInputText(data.value)}
           onSubmit={handleSubmit}
@@ -260,7 +275,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {showCounter && (
           <div className={counterStyles.container} id={charCounterId}>
             <Text className={`${counterStyles.text} ${getCounterStyle()}`}>
-              {charCount} / {CHAR_MAX_RECOMMENDED} characters (recommended limit)
+              {charCount} / {CHAR_MAX_RECOMMENDED} characters
             </Text>
           </div>
         )}
